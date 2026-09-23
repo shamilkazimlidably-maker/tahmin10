@@ -1,4 +1,5 @@
 import { db, must } from "../lib/supabase";
+import { purgeVisits } from "../lib/visits";
 import { notifyAdmin } from "../lib/admin";
 import { mapLimit } from "../lib/util";
 import { FUNNEL, LEARNING, RETENTION } from "../config/funnel";
@@ -124,6 +125,7 @@ export async function runLearningCycle(options: { forceCoach?: boolean; digest?:
 
   await db().rpc("refresh_daily_stats", { p_days: 120 }).then((r) => r.error && console.error("[analytics]", r.error.message, "— run supabase/analytics.sql"));
   const purged = await purgeOldData();
+  await purgeVisits(60).catch(() => 0);
   const result: LearningRunResult = { closedAsSilent, analyzed, analysisErrors: errors, experimentNotes, coach, purged };
   if (options.digest !== false) await dailyDigest(result).catch((e) => console.error("[learning] digest:", e));
   return result;

@@ -14,6 +14,7 @@ Next.js 15 (App Router, Vercel) · Supabase (Postgres) · Telegram Bot API · De
 |---|---|
 | `app/page.tsx` | Açılış sayfası (mobil öncelikli, metinler panelden düzenlenir) |
 | `app/gizlilik` | Gizlilik sayfası (KVKK) |
+| `components/landing/` | `MainLanding` (gerçek ziyaretçiler) ve `SafeLanding` ("Futbol Veri Merkezi": botlar, link önizleyiciler, izin verilen ülkeler dışı). Karar `src/lib/gate.ts`, kurallar panel → Ziyaretçi Filtresi, metinler panel → Veri Merkezi Sayfası. Ziyaretler `page_visits` tablosuna kaydedilir (`supabase/visitor_filter.sql`) |
 | `app/admin` | Yönetim paneli (Türkçe) — `/admin`, şifre `ADMIN_PASSWORD` |
 | `app/api/lead/start` | Sitedeki düğme: kişi kaydı + Meta "Contact" + Telegram'a yönlendirme |
 | `app/api/telegram/webhook` | Bot: mesajlar, /start, /planlar, /kanal, /dur, kanal üyelik kontrolü, destek |

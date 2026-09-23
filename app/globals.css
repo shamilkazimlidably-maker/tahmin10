@@ -157,3 +157,24 @@ h2 { margin: 0 0 18px; font: 800 1.95rem/1.05 var(--display); letter-spacing: 0.
   .tg__msg, .sk { animation: none; }
   .cta, .sticky, .faq summary::after { transition: none; }
 }
+
+/* ---------- "Futbol Veri Merkezi" (botlara / ülke dışına gösterilen bilgi sayfası) ---------- */
+.sf { min-height: 100vh; background: #f4f6f8; color: #14212b; font: 16px/1.65 var(--body); }
+.sf a { color: #0f4c81; }
+.sf__top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 20px; padding: 14px 20px; background: #0f2a44; color: #fff; }
+.sf__brand { font: 800 19px/1 var(--display); letter-spacing: 0.04em; }
+.sf__nav { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 14px; }
+.sf__nav a { color: rgba(255, 255, 255, 0.85); text-decoration: none; }
+.sf__nav a:hover { color: #fff; text-decoration: underline; }
+.sf__main { max-width: 840px; margin: 0 auto; padding: 28px 20px 48px; }
+.sf__hero h1 { margin: 0 0 8px; font: 800 clamp(1.9rem, 6vw, 2.8rem)/1.1 var(--display); color: #0f2a44; }
+.sf__tagline { margin: 0; font-size: 1.05rem; color: #46586a; }
+.sf__cards { list-style: none; margin: 22px 0 6px; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.sf__cards li { background: #fff; border: 1px solid #dde4ea; border-radius: 12px; padding: 14px 16px; display: grid; gap: 4px; }
+.sf__cards b { font: 800 1.5rem/1.1 var(--display); color: #0f4c81; }
+.sf__cards span { font-size: 0.9rem; color: #46586a; }
+.sf__section { margin-top: 28px; padding-top: 18px; border-top: 1px solid #dde4ea; }
+.sf__section h2 { margin: 0 0 10px; font: 800 1.45rem/1.15 var(--display); color: #0f2a44; }
+.sf__section p { margin: 0 0 12px; max-width: 70ch; color: #24323e; }
+.sf__foot { padding: 20px; text-align: center; font-size: 0.85rem; color: #6b7c8c; border-top: 1px solid #dde4ea; background: #fff; }
+.sf__foot p { margin: 0; }

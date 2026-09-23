@@ -655,3 +655,21 @@ revoke execute on function refresh_daily_stats(integer) from public, anon, authe
 revoke execute on function analytics_extra() from public, anon, authenticated;
 grant execute on function refresh_daily_stats(integer) to service_role;
 grant execute on function analytics_extra() to service_role;
+
+-- ---------------------------------------------------------------------
+--  GÜNCELLEME 4 — ziyaretçi filtresi (visitor_filter.sql ile aynı)
+-- ---------------------------------------------------------------------
+-- Her sayfa gösterimi: hangi sayfa gösterildi, neden, ülke, user-agent. IP tutulmaz. 60 gün sonra silinir.
+create table if not exists page_visits (
+  id bigint generated always as identity primary key,
+  created_at timestamptz not null default now(),
+  page text not null,          -- main | safe
+  reason text not null,        -- ok | bot | country | no_country | forced | preview | disabled
+  country text,
+  ua text,
+  referer text,
+  campaign text,
+  source text
+);
+create index if not exists page_visits_created_idx on page_visits (created_at desc);
+alter table page_visits enable row level security;

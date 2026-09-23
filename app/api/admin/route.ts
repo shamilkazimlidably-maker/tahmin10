@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { LEARNING, type ExperimentMetric } from "@/src/config/funnel";
 import { analyticsAiHistory, getAnalytics, runAnalyticsAi, saveSpend, spDate } from "@/src/lib/analytics";
+import { purgeVisits, visitorStats } from "@/src/lib/visits";
 import { envProblems, getEnv, type Env } from "@/src/lib/env";
 import { deepseekJson } from "@/src/lib/deepseek";
 import { getLeadById, getLeadByTelegramId, recordEvent, recordMessage, updateLead, type Lead, type StoredMessage } from "@/src/lib/leads";
@@ -202,7 +203,7 @@ async function handle(action: string, body: any): Promise<unknown> {
     case "settings_save":
     case "settings_reset": {
       const section = String(body.section) as SettingsSection;
-      if (!["business", "prompts", "rules", "texts", "landing", "integrations"].includes(section)) bad("Bilinmeyen bölüm.");
+      if (!["business", "prompts", "rules", "texts", "landing", "safe", "gate", "integrations"].includes(section)) bad("Bilinmeyen bölüm.");
       if (action === "settings_save") await saveSection(section, body.value);
       else await resetSection(section);
       await recordEvent(null, action === "settings_save" ? "ADMIN_SETTINGS_SAVED" : "ADMIN_SETTINGS_RESET", { section });
@@ -283,6 +284,17 @@ async function handle(action: string, body: any): Promise<unknown> {
     case "payment_link": {
       const lead = (await getLeadByTelegramId(String(body.telegram_id ?? "").trim())) ?? bad("Bu Telegram ID ile botu başlatmış kimse yok.");
       return { message: await linkPaymentToLead(String(body.payment_id), lead) };
+    }
+
+    /* ---------------- visitor filter ---------------- */
+    case "visits": {
+      const days = Math.min(90, Math.max(1, Number(body.days) || 7));
+      return { days, ...(await visitorStats(days)) };
+    }
+    case "visits_clear": {
+      const deleted = await purgeVisits(Number(body.days) || 0);
+      await recordEvent(null, "ADMIN_VISITS_CLEARED", { deleted });
+      return { deleted };
     }
 
     /* ---------------- analytics ---------------- */

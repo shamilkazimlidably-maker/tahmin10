@@ -2,6 +2,8 @@ import { z } from "zod";
 import { BUSINESS } from "../config/business";
 import { FOLLOWUPS, FOLLOWUP_RULES, FUNNEL, LEARNING, META_EVENTS, RETENTION, SIGNALS, SUPPORT } from "../config/funnel";
 import { LANDING, LANDING_OPTIONAL_KEYS } from "../config/landing";
+import { SAFE, SAFE_OPTIONAL_KEYS } from "../config/safe";
+import { GATE, type GateSettings } from "../config/gate";
 import { TEXTS } from "../config/texts";
 import { INTEGRATION_OVERRIDES } from "./integrations";
 import { lockedPromptPart, PROMPT_BLOCKS, salesAgentStaticPrompt, STAGE_INSTRUCTIONS, SUPPORT_KB, type KnowledgeEntry, type PromptBlockKey } from "../config/prompts";
@@ -135,6 +137,9 @@ const D_TEXTS = { ...TEXTS } as Dict<string>;
 const D_LANDING = { ...LANDING } as Dict<string>;
 /** Landing fields that may be left empty (the line simply disappears). */
 const LANDING_OPTIONAL = new Set<string>(LANDING_OPTIONAL_KEYS);
+const D_SAFE = { ...SAFE } as Dict<string>;
+const SAFE_OPTIONAL = new Set<string>(SAFE_OPTIONAL_KEYS);
+const D_GATE: GateSettings = { ...GATE };
 
 export type StoredIntegrations = {
   metaPixelId?: string; metaAccessToken?: string; metaTestEventCode?: string; supportUsername?: string;
@@ -145,6 +150,8 @@ export type StoredIntegrations = {
 export type StoredSettings = {
   texts?: Dict<string>;
   landing?: Dict<string>;
+  safe?: Dict<string>;
+  gate?: Partial<GateSettings>;
   integrations?: StoredIntegrations;
   business?: unknown;
   prompts?: { blocks?: Dict<string>; stages?: Dict<string> };
@@ -179,6 +186,8 @@ function applyStored(s: StoredSettings): void {
 
   for (const k of Object.keys(D_TEXTS)) (TEXTS as Dict<string>)[k] = text(s.texts?.[k], 1500) ?? D_TEXTS[k]!;
   for (const k of Object.keys(D_LANDING)) (LANDING as Dict<string>)[k] = text(s.landing?.[k], 1200, LANDING_OPTIONAL.has(k)) ?? D_LANDING[k]!;
+  for (const k of Object.keys(D_SAFE)) (SAFE as Dict<string>)[k] = text(s.safe?.[k], 3000, SAFE_OPTIONAL.has(k)) ?? D_SAFE[k]!;
+  Object.assign(GATE, D_GATE, cleanGate(s.gate ?? {}));
 
   const it = s.integrations ?? {};
   const o = INTEGRATION_OVERRIDES;
@@ -269,6 +278,18 @@ export class SettingsError extends Error {
   }
 }
 
+/** Ziyaretçi filtresi ayarlarını temizler; strict=true ise hatalı değerde SettingsError fırlatır. */
+function cleanGate(v: Partial<GateSettings>, strict = false): GateSettings {
+  const problems: string[] = [];
+  const bool = (x: unknown, d: boolean) => (typeof x === "boolean" ? x : x === "true" ? true : x === "false" ? false : d);
+  const countries = typeof v.allowedCountries === "string" ? v.allowedCountries.toUpperCase().replace(/\s+/g, "") : D_GATE.allowedCountries;
+  if (countries && !/^[A-Z]{2}(,[A-Z]{2})*$/.test(countries)) problems.push("Ülke kodları iki harfli ve virgülle ayrılmış olmalı (ör. TR,AZ).");
+  const unknownCountry = v.unknownCountry === "safe" ? "safe" : v.unknownCountry === "allow" ? "allow" : D_GATE.unknownCountry;
+  const extra = typeof v.extraBotKeywords === "string" ? v.extraBotKeywords.slice(0, 500) : D_GATE.extraBotKeywords;
+  if (strict && problems.length) throw new SettingsError(problems);
+  return { enabled: bool(v.enabled, D_GATE.enabled), allowedCountries: problems.length ? D_GATE.allowedCountries : countries, unknownCountry, botsToSafe: bool(v.botsToSafe, D_GATE.botsToSafe), extraBotKeywords: extra, forceSafe: bool(v.forceSafe, D_GATE.forceSafe) };
+}
+
 /** Returns the cleaned value to store, or throws SettingsError with messages in Turkish. */
 export function validateSection(section: SettingsSection, value: unknown): unknown {
   if (section === "business") {
@@ -303,13 +324,14 @@ export function validateSection(section: SettingsSection, value: unknown): unkno
     }
     return { blocks, stages };
   }
-  if (section === "texts" || section === "landing") {
-    const defaults = section === "texts" ? D_TEXTS : D_LANDING;
+  if (section === "gate") return cleanGate((value ?? {}) as Partial<GateSettings>, true);
+  if (section === "texts" || section === "landing" || section === "safe") {
+    const defaults = section === "texts" ? D_TEXTS : section === "landing" ? D_LANDING : D_SAFE;
     const v = (value ?? {}) as Dict<string>;
     const out: Dict<string> = {};
     for (const k of Object.keys(defaults)) {
-      const optional = section === "landing" && LANDING_OPTIONAL.has(k);
-      const t = text(v[k], section === "texts" ? 1500 : 1200, optional);
+      const optional = (section === "landing" && LANDING_OPTIONAL.has(k)) || (section === "safe" && SAFE_OPTIONAL.has(k));
+      const t = text(v[k], section === "texts" ? 1500 : section === "landing" ? 1200 : 3000, optional);
       if (t === undefined) throw new SettingsError([`“${k}” boş olamaz ve çok uzun olamaz.`]);
       if (k.startsWith("btn") && t.length > 40) throw new SettingsError([`“${k}”: düğme yazısı en fazla 40 karakter olabilir.`]);
       out[k] = t;
@@ -406,12 +428,14 @@ export function settingsView() {
   };
   return {
     ...live,
-    defaults: { texts: D_TEXTS, landing: D_LANDING, business: D.business, prompts: { blocks: D.blocks, stages: D.stages }, rules: { ...D.rules, weights: D.weights, followupRules: D.followupRules } },
+    defaults: { texts: D_TEXTS, landing: D_LANDING, safe: D_SAFE, gate: D_GATE, business: D.business, prompts: { blocks: D.blocks, stages: D.stages }, rules: { ...D.rules, weights: D.weights, followupRules: D.followupRules } },
     specs: RULE_SPECS,
     signals: signalRows.map((s) => ({ key: s.key, source: s.source, description: s.description })),
     followupBuckets: Object.fromEntries(Object.entries(FOLLOWUP_RULES).map(([bucket, rules]) => [bucket, rules.map((r) => ({ key: r.key, keyboard: r.keyboard }))])),
     texts: { ...TEXTS } as Dict<string>,
     landing: { ...LANDING } as Dict<string>,
+    safe: { ...SAFE } as Dict<string>,
+    gate: { ...GATE },
     integrations: {
       metaPixelId: INTEGRATION_OVERRIDES.metaPixelId ?? "",
       metaAccessToken: "", // never leaves the server

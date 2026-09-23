@@ -427,7 +427,7 @@ function Conversations({ initial }: { initial?: string | null }) {
 /* =====================================================================
  *  Ayar sekmeleri için ortak yardımcı
  * ===================================================================== */
-function useSection(section: "business" | "prompts" | "rules" | "texts" | "landing" | "integrations") {
+function useSection(section: "business" | "prompts" | "rules" | "texts" | "landing" | "safe" | "gate" | "integrations") {
   const [s, setS] = useState<Any>(null);
   const [draft, setDraft] = useState<Any>(null);
   const [busy, run] = useBusy();
@@ -1053,7 +1053,7 @@ const LANDING_GROUPS: FlatGroup[] = [
   { title: "Dürüstlük bölümü, son düğme ve alt bilgi", desc: "“Garanti yok” mesajı ve +18 uyarısı hem yasal koruma hem de Meta reklam onayı için önemlidir; yumuşatabilirsiniz ama kaldırmayın.", items: [["honestTitle", "Bölüm başlığı"], ["honestText", "Metin", "", 4], ["cta2", "Sayfa sonundaki düğme yazısı"], ["stickyText", "Alt yapışkan çubuktaki kısa yazı (isteğe bağlı)"], ["footer", "Alt bilgi (+18 uyarısı)", "", 4]] },
 ];
 
-function FlatSection({ section, title, intro, groups, after }: { section: "texts" | "landing"; title: string; intro: ReactNode; groups: FlatGroup[]; after?: ReactNode }) {
+function FlatSection({ section, title, intro, groups, after }: { section: "texts" | "landing" | "safe"; title: string; intro: ReactNode; groups: FlatGroup[]; after?: ReactNode }) {
   const { s, draft, upd, save, reset, busy, dirty } = useSection(section);
   if (!draft) return <p className="a-help">Yükleniyor…</p>;
   return (
@@ -1519,9 +1519,101 @@ function Audiences() {
 }
 
 /* =====================================================================
+ *  ZİYARETÇİ FİLTRESİ  (bot / ülke ayrımı → iki sayfa) + VERİ MERKEZİ SAYFASI
+ * ===================================================================== */
+const REASON_TR: Record<string, [string, "green" | "red" | "amber" | "blue"]> = {
+  ok: ["Gerçek ziyaretçi", "green"], bot: ["Bot / tarayıcı robotu", "red"], country: ["İzinli ülke dışı", "amber"], no_country: ["Ülke bilinmiyor", "blue"],
+  forced: ["Zorla güvenli sayfa", "amber"], preview: ["Önizleme (siz)", "blue"], disabled: ["Filtre kapalı", "blue"],
+};
+const device = (ua: string | null) => !ua ? "?" : /instagram/i.test(ua) ? "Instagram" : /fban|fbav/i.test(ua) ? "Facebook" : /iphone|ipad/i.test(ua) ? "iPhone" : /android/i.test(ua) ? "Android" : /windows/i.test(ua) ? "Windows" : /macintosh/i.test(ua) ? "Mac" : "Diğer";
+
+function VisitorFilter() {
+  const { s, draft: g, upd, save, reset, busy, dirty } = useSection("gate");
+  const [v, setV] = useState<Any>(null);
+  const [days, setDays] = useState(7);
+  const [vb, run] = useBusy();
+  const load = useCallback(() => run("load", async () => setV(await api("visits", { days }))), [days, run]);
+  useEffect(() => { load(); }, [load]);
+  if (!g || !s) return <p className="a-help">Yükleniyor…</p>;
+  const check = (key: string, label: string, help?: string) => (
+    <label className="a-row" style={{ alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
+      <input type="checkbox" style={{ width: 20, marginTop: 3 }} checked={Boolean(g[key])} onChange={(e) => upd([key], e.target.checked)} />
+      <span><b>{label}</b>{help && <><br /><span className="a-help">{help}</span></>}</span>
+    </label>
+  );
+  return (
+    <>
+      <h1>Ziyaretçi Filtresi</h1>
+      <p className="a-intro">Site adresi tek (<code>/</code>), ama iki sayfa var. <b>Gerçek ziyaretçiler</b> (izin verilen ülkelerden, gerçek tarayıcıyla) Telegram düğmeli ana açılış sayfasını görür; <b>botlar, tarayıcı robotları, link önizleyiciler ve izin verilen ülkeler dışından gelenler</b> “Futbol Veri Merkezi” bilgi sayfasını görür. Karar her istekte sunucuda verilir; ziyaretçi bunu fark etmez. Bot sayfasında Telegram düğmesi ve Meta pikseli yoktur, o yüzden istatistikleriniz kirlenmez.</p>
+      <div className="a-warn"><b>Bilmeniz gereken risk:</b> reklam platformlarının inceleme sistemlerine gerçek kullanıcılardan farklı bir sayfa göstermek Meta'nın kurallarında “cloaking” sayılır ve tespit edilirse reklam hesabı, Business Manager ve alan adı kalıcı olarak kapatılabilir. Meta incelemeleri her zaman bot user-agent'ıyla gelmez; gerçek tarayıcı ve yerel IP de kullanılır. Ülke filtresi (yalnızca Türkiye/Azerbaycan'a hizmet vermek) ve robot filtresi meşru kullanımlardır; kararı ve sorumluluğu siz verirsiniz.</div>
+
+      <Card title="Kurallar" desc="Kaydettikten sonra en geç 20 saniye içinde geçerli olur.">
+        {check("enabled", "Filtre açık", "Kapalıyken herkes ana sayfayı görür; ziyaretler yine kaydedilir.")}
+        {check("botsToSafe", "Botlar ve tarayıcı robotları güvenli sayfayı görsün", "Googlebot, facebookexternalhit, Telegram/WhatsApp link önizleme, curl, python, headless tarayıcılar vb. Instagram/Facebook uygulama içi tarayıcı GERÇEK ziyaretçi sayılır.")}
+        <Field label="İzin verilen ülkeler" help="İki harfli ülke kodları, virgülle. Boş bırakırsanız ülke kontrolü yapılmaz. Vercel'in konum başlığı kullanılır; VPN kullananlar VPN ülkesiyle görünür."><Txt value={g.allowedCountries} onChange={(v) => upd(["allowedCountries"], v.toUpperCase())} placeholder="TR,AZ" /></Field>
+        <Field label="Ülke tespit edilemezse">
+          <select value={g.unknownCountry} onChange={(e) => upd(["unknownCountry"], e.target.value)}>
+            <option value="allow">Ana sayfayı göster</option>
+            <option value="safe">Güvenli sayfayı göster</option>
+          </select>
+        </Field>
+        <Field label="Ek bot anahtar kelimeleri" help="Virgülle. User-agent içinde geçerse bot sayılır (en az 3 harf). Aşağıdaki listede şüpheli bir tarayıcı görürseniz buraya ekleyin."><Txt value={g.extraBotKeywords} onChange={(v) => upd(["extraBotKeywords"], v)} placeholder="ör. Bilgisayar, MyMonitor" /></Field>
+        {check("forceSafe", "ACİL: herkese güvenli sayfayı göster", "Ana sayfayı geçici olarak kapatır. Normalde kapalı olmalı.")}
+        <SaveBar onSave={save} onReset={reset} busy={busy} dirty={dirty} />
+      </Card>
+
+      <Card title="Önizleme" desc="Bu bağlantılar yalnızca panele giriş yapmış tarayıcıda çalışır (giriş çerezi arar). Başkaları için hiçbir etkisi yoktur.">
+        <div className="a-row">
+          <a className="a-btn soft" style={{ textDecoration: "none" }} href="/?goruntule=ana" target="_blank" rel="noreferrer">Ana açılış sayfasını aç</a>
+          <a className="a-btn soft" style={{ textDecoration: "none" }} href="/?goruntule=veri" target="_blank" rel="noreferrer">Futbol Veri Merkezi sayfasını aç</a>
+        </div>
+        <p className="a-help" style={{ marginTop: 8 }}>Yurt dışından test etmek için: bir VPN ile Türkiye dışına çıkıp /'yi açın — güvenli sayfayı görmelisiniz. Bot testi için terminalde <code>curl -A "Googlebot" https://ALANADINIZ/</code> (çıktıda “Futbol Veri Merkezi” geçmeli).</p>
+      </Card>
+
+      <Card title="Kim hangi sayfayı gördü?" desc="Her sayfa gösterimi kaydedilir (IP tutulmaz). 60 günden eskiler otomatik silinir." right={<div className="a-row">{[7, 30, 90].map((n) => <Btn key={n} small kind={days === n ? undefined : "soft"} onClick={() => setDays(n)}>Son {n} gün</Btn>)}<Btn small kind="soft" onClick={load} busy={vb === "load"}>Yenile</Btn></div>}>
+        {!v ? <p className="a-help">Yükleniyor…</p> : v.sqlMissing ? <div className="a-warn">Ziyaret tablosu bulunamadı. Supabase → SQL Editor'de <b>supabase/visitor_filter.sql</b> dosyasını bir kez çalıştırın.</div> : (
+          <>
+            <div className="a-stats">
+              <div className="a-stat"><span>Toplam gösterim</span><b>{v.total}</b></div>
+              <div className="a-stat"><span>Ana sayfa (gerçek)</span><b style={{ color: C.green }}>{v.main}</b></div>
+              <div className="a-stat"><span>Güvenli sayfa (bot / ülke dışı)</span><b style={{ color: C.red }}>{v.safe}</b></div>
+              <div className="a-stat"><span>Bot payı</span><b>{v.total ? `%${Math.round(((v.byReason.find((r: Any) => r.k === "bot")?.v ?? 0) / v.total) * 100)}` : "–"}</b></div>
+            </div>
+            {v.truncated && <p className="a-help">Çok fazla kayıt var; yalnızca son 5000 gösterim sayıldı.</p>}
+            <div className="a-grid2">
+              <Card title="Günlük"><LineChart labels={v.byDay.map((d: Any) => shortDay(d.day))} series={[{ name: "Ana sayfa", color: C.green, values: v.byDay.map((d: Any) => d.main) }, { name: "Güvenli sayfa", color: C.red, values: v.byDay.map((d: Any) => d.safe) }]} /></Card>
+              <Card title="Neden"><HBars items={v.byReason.map((r: Any) => ({ label: REASON_TR[r.k]?.[0] ?? r.k, value: r.v }))} /></Card>
+              <Card title="Güvenli sayfayı görenlerin ülkesi" desc="Botlar da bir ülkeden gelir (çoğu ABD/İrlanda veri merkezi)."><HBars color={C.amber} items={v.safeByCountry.slice(0, 12).map((r: Any) => ({ label: r.k, value: r.v }))} /></Card>
+              <Card title="Bütün ziyaretlerin ülkesi"><HBars color={C.blue} items={v.byCountry.slice(0, 12).map((r: Any) => ({ label: r.k === "?" ? "bilinmiyor" : r.k, value: r.v }))} /></Card>
+            </div>
+            <div className="a-scroll"><table className="a-table" style={{ minWidth: 820 }}><thead><tr><th>Zaman</th><th>Sayfa</th><th>Neden</th><th>Ülke</th><th>Cihaz</th><th>Kampanya</th><th>Tarayıcı kimliği (user-agent)</th></tr></thead><tbody>
+              {v.recent.map((r: Any) => <tr key={r.id}><td className="a-help">{when(r.created_at)}</td><td>{r.page === "safe" ? <Pill tone="red">Güvenli</Pill> : <Pill tone="green">Ana</Pill>}</td><td><Pill tone={REASON_TR[r.reason]?.[1]}>{REASON_TR[r.reason]?.[0] ?? r.reason}</Pill></td><td>{r.country ?? "?"}</td><td>{device(r.ua)}</td><td className="a-help">{r.campaign ?? (r.source ?? "–")}</td><td className="a-help" title={r.ua ?? ""} style={{ maxWidth: 360, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.ua ?? "(boş)"}</td></tr>)}
+              {!v.recent.length && <tr><td colSpan={7} className="a-help">Bu dönemde ziyaret yok.</td></tr>}
+            </tbody></table></div>
+            <div className="a-row" style={{ marginTop: 10 }}><Btn small kind="danger" onClick={() => window.confirm("Bütün ziyaret kayıtları silinsin mi? (Ayarlar etkilenmez.)") && run("clear", async () => { await api("visits_clear", { days: 0 }); await load(); }, "Ziyaret kayıtları silindi.")} busy={vb === "clear"}>Kayıtları temizle</Btn></div>
+          </>
+        )}
+      </Card>
+    </>
+  );
+}
+
+const SAFE_GROUPS: FlatGroup[] = [
+  { title: "Başlık ve arama motoru bilgileri", desc: "Sekme başlığı, meta açıklama ve sayfanın üst kısmı.", items: [["brand", "Site adı (üst çubuk)"], ["title", "Sekme başlığı (title)"], ["metaDescription", "Meta açıklama", "Arama sonuçlarında görünen 1–2 cümle.", 2], ["h1", "Sayfa başlığı (H1)"], ["tagline", "Başlığın altındaki cümle (isteğe bağlı)"]] },
+  { title: "Öne çıkan 3 kutu (isteğe bağlı)", desc: "Kısa başlık + tek satır açıklama. Boş bırakılan kutu görünmez.", items: [["card1Title", "Kutu 1 başlık"], ["card1Text", "Kutu 1 açıklama"], ["card2Title", "Kutu 2 başlık"], ["card2Text", "Kutu 2 açıklama"], ["card3Title", "Kutu 3 başlık"], ["card3Text", "Kutu 3 açıklama"]] },
+  { title: "Giriş", items: [["introTitle", "Başlık"], ["intro", "Metin", "", 5]] },
+  { title: "Bölüm 1", items: [["s1Title", "Başlık"], ["s1p1", "1. paragraf", "", 5], ["s1p2", "2. paragraf (isteğe bağlı)", "", 5]] },
+  { title: "Bölüm 2", items: [["s2Title", "Başlık"], ["s2p1", "1. paragraf", "", 5], ["s2p2", "2. paragraf (isteğe bağlı)", "", 4]] },
+  { title: "Bölüm 3", items: [["s3Title", "Başlık"], ["s3p1", "1. paragraf", "", 5], ["s3p2", "2. paragraf (isteğe bağlı)", "", 4]] },
+  { title: "Bölüm 4", items: [["s4Title", "Başlık"], ["s4p1", "1. paragraf", "", 5], ["s4p2", "2. paragraf (isteğe bağlı)", "", 4]] },
+  { title: "Bölüm 5", items: [["s5Title", "Başlık"], ["s5p1", "1. paragraf", "", 5], ["s5p2", "2. paragraf (isteğe bağlı)", "", 4]] },
+  { title: "İletişim ve alt bilgi", items: [["contactTitle", "Başlık"], ["contactText", "Metin (isteğe bağlı)", "", 2], ["contactEmail", "E-posta adresi (isteğe bağlı)", "Yazarsanız tıklanabilir bağlantı olur."], ["footer", "Alt bilgi", "", 2]] },
+];
+
+/* =====================================================================
  *  Kabuk: giriş + menü
  * ===================================================================== */
-const TABS: [string, string][] = [["ozet", "📊 Genel Bakış"], ["analiz", "📈 Analiz"], ["konusmalar", "💬 Konuşmalar"], ["destek", "🆘 Destek Talepleri"], ["isletme", "🏷️ İşletme Bilgileri"], ["asistan", "🤖 Satış Asistanı"], ["mesajlar", "✉️ Hazır Mesajlar"], ["kurallar", "⚖️ Kurallar ve Puanlama"], ["ogrenme", "🧠 Öğrenme"], ["sayfa", "🌐 Açılış Sayfası"], ["entegrasyon", "🔌 Entegrasyonlar"], ["kitleler", "🎯 Hedef Kitleler"], ["odemeler", "💳 Ödemeler"], ["veri", "🗑️ Veri Yönetimi"], ["sistem", "🛠️ Sistem"]];
+const TABS: [string, string][] = [["ozet", "📊 Genel Bakış"], ["analiz", "📈 Analiz"], ["konusmalar", "💬 Konuşmalar"], ["destek", "🆘 Destek Talepleri"], ["isletme", "🏷️ İşletme Bilgileri"], ["asistan", "🤖 Satış Asistanı"], ["mesajlar", "✉️ Hazır Mesajlar"], ["kurallar", "⚖️ Kurallar ve Puanlama"], ["ogrenme", "🧠 Öğrenme"], ["sayfa", "🌐 Açılış Sayfası"], ["filtre", "🛡️ Ziyaretçi Filtresi"], ["verimerkezi", "🧾 Veri Merkezi Sayfası"], ["entegrasyon", "🔌 Entegrasyonlar"], ["kitleler", "🎯 Hedef Kitleler"], ["odemeler", "💳 Ödemeler"], ["veri", "🗑️ Veri Yönetimi"], ["sistem", "🛠️ Sistem"]];
 
 export default function AdminPage() {
   const [auth, setAuth] = useState<"checking" | "in" | "out">("checking");
@@ -1578,6 +1670,8 @@ export default function AdminPage() {
               {tab === "sayfa" && <FlatSection section="landing" title="Açılış Sayfası" groups={LANDING_GROUPS} intro={<>Reklamdan gelenlerin gördüğü sayfanın bütün yazıları. Kaydettikten sonra site en geç 2 dakika içinde güncellenir. Değişkenler: <code>{"{brand}"}</code>, <code>{"{frequency}"}</code>, <code>{"{age}"}</code>. İpucu: aynı anda yalnızca BİR şeyi değiştirin (ör. başlık) ve Genel Bakış'ta “sitede butona basan → botu başlatan” oranını birkaç gün izleyin.</>} after={<div className="a-info">Sayfayı görmek için: <a href="/" target="_blank" rel="noreferrer">siteyi yeni sekmede aç</a>. Sağdaki “kupon” görseli bir illüstrasyondur ve gerçek tahmin içermez.</div>} />}
               {tab === "entegrasyon" && <Integrations />}
               {tab === "kitleler" && <Audiences />}
+              {tab === "filtre" && <VisitorFilter />}
+              {tab === "verimerkezi" && <FlatSection section="safe" title="Veri Merkezi Sayfası" groups={SAFE_GROUPS} intro={<>Botlara, tarayıcı robotlarına ve izin verilen ülkeler dışından gelenlere gösterilen “Futbol Veri Merkezi” sayfasının bütün yazıları (kime gösterileceği: Ziyaretçi Filtresi sekmesi). Bu sayfada Telegram düğmesi, fiyat ya da tahmin yoktur; öyle kalması önerilir. Kaydettikten sonra en geç 20 saniye içinde yayına girer. Önizleme: Ziyaretçi Filtresi → Önizleme.</>} />}
               {tab === "veri" && <DataAdmin />}
               {tab === "isletme" && <Business />}
               {tab === "asistan" && <Assistant />}
