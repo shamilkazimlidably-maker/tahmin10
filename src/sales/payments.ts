@@ -5,6 +5,7 @@ import { notifyAdmin } from "../lib/admin";
 import { db, must } from "../lib/supabase";
 import { getLeadById, getLeadByMembership, recordEvent, recordMessage, updateLead, type Lead } from "../lib/leads";
 import { sendMetaEvent } from "../lib/meta";
+import { attributePurchase } from "./posts";
 import { sendText } from "../lib/telegram";
 import { planKeyFromWhopId, readAmount, readMetadata, readPaymentRefs } from "../lib/whop";
 import { deliverVipAccess, revokeVipAccess } from "./access";
@@ -95,6 +96,7 @@ export async function processPaymentSucceeded(data: unknown, options: { forceLea
       ),
     "payments.upsert",
   );
+  if (lead) await attributePurchase(lead.id, refs.paymentId, amount, isFirst);
 
   if (!lead) {
     await notifyAdmin(

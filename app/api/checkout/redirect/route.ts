@@ -7,6 +7,7 @@ import { db } from "@/src/lib/supabase";
 import { notifyAdmin } from "@/src/lib/admin";
 import { allowRequest } from "@/src/lib/rate-limit";
 import { getLeadByToken, recordEvent, recordMessage, setSystemSignal, updateLead } from "@/src/lib/leads";
+import { attributeCheckout } from "@/src/sales/posts";
 import { sendMetaEvent } from "@/src/lib/meta";
 import { clientIp } from "@/src/lib/util";
 import { createCheckout, staticCheckoutUrl } from "@/src/lib/whop";
@@ -107,6 +108,7 @@ export async function GET(request: NextRequest) {
   });
   await setSystemSignal(lead.id, "clicked_vip_plan", `Clicked ${plan.key}`);
   await setSystemSignal(lead.id, "checkout_started", `Checkout opened (${via})`);
+  await attributeCheckout(lead.id);
   await recordEvent(lead.id, "CHECKOUT_STARTED", { plan: plan.key, via });
   await recordMessage(lead.id, "event", `Kişi ${plan.name} planının ödeme sayfasını açtı.`);
   if (first) {

@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { LEARNING, type ExperimentMetric } from "@/src/config/funnel";
 import { analyticsAiHistory, getAnalytics, runAnalyticsAi, saveSpend, spDate } from "@/src/lib/analytics";
 import { purgeVisits, visitorStats } from "@/src/lib/visits";
+import { deleteFromChannel, deletePostRow, deleteTemplate, duplicatePost, editInChannel, pinInChannel, PostError, postsOverview, runDuePosts, savePost, saveTemplate, sendPost, uploadMedia, validatePost } from "@/src/sales/posts";
 import { envProblems, getEnv, type Env } from "@/src/lib/env";
 import { deepseekJson } from "@/src/lib/deepseek";
 import { getLeadById, getLeadByTelegramId, recordEvent, recordMessage, updateLead, type Lead, type StoredMessage } from "@/src/lib/leads";
@@ -286,6 +287,47 @@ async function handle(action: string, body: any): Promise<unknown> {
       return { message: await linkPaymentToLead(String(body.payment_id), lead) };
     }
 
+    /* ---------------- channel posts ---------------- */
+    case "posts_overview":
+      return postsOverview();
+    case "post_validate":
+      return { ok: true, post: validatePost(body.post as Record<string, unknown>, { allowClaims: Boolean(body.allowClaims) }) };
+    case "post_save": {
+      const mode = body.mode === "schedule" ? "schedule" : body.mode === "send" ? "send" : "draft";
+      const row = await savePost(validatePost(body.post as Record<string, unknown>, { allowClaims: Boolean(body.allowClaims) }), mode);
+      await recordEvent(null, "ADMIN_POST_SAVED", { post: row.id, mode });
+      return { post: row };
+    }
+    case "post_send_now": {
+      const row = await sendPost(Number(body.id));
+      return { post: row };
+    }
+    case "post_edit_live": {
+      await editInChannel(Number(body.id), validatePost(body.post as Record<string, unknown>, { allowClaims: Boolean(body.allowClaims) }));
+      return { ok: true };
+    }
+    case "post_duplicate":
+      return { post: await duplicatePost(Number(body.id)) };
+    case "post_delete_row":
+      await deletePostRow(Number(body.id));
+      return { ok: true };
+    case "post_delete_channel":
+      await deleteFromChannel(Number(body.id));
+      return { ok: true };
+    case "post_pin":
+      await pinInChannel(Number(body.id), body.pin !== false);
+      return { ok: true };
+    case "post_run_due":
+      return runDuePosts();
+    case "post_media_upload":
+      return uploadMedia(String(body.data ?? ""), String(body.mime ?? ""));
+    case "template_save":
+      await saveTemplate({ ...validatePost(body.post as Record<string, unknown>, { allowClaims: Boolean(body.allowClaims) }), templateId: body.templateId ? Number(body.templateId) : null });
+      return { ok: true };
+    case "template_delete":
+      await deleteTemplate(Number(body.id));
+      return { ok: true };
+
     /* ---------------- visitor filter ---------------- */
     case "visits": {
       const days = Math.min(90, Math.max(1, Number(body.days) || 7));
@@ -497,6 +539,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(await handle(action, body));
   } catch (error) {
     if (error instanceof SettingsError) return NextResponse.json({ error: error.problems.join("\n") }, { status: 400 });
+    if (error instanceof PostError) return NextResponse.json({ error: error.message }, { status: 400 });
     if (error instanceof UserError) return NextResponse.json({ error: error.message }, { status: 400 });
     console.error("[admin]", action, error);
     return NextResponse.json({ error: `Sunucu hatası: ${(error as Error).message.slice(0, 400)}` }, { status: 500 });

@@ -33,7 +33,7 @@ Next.js 15 (App Router, Vercel) · Supabase (Postgres) · Telegram Bot API · De
 Bu klasörü bir GitHub deposuna yükleyin (depo kökünde `app`, `src`, `supabase`, `package.json` olacak şekilde).
 
 ### 2. Supabase
-Yeni proje → SQL Editor → `supabase/schema.sql` dosyasının tamamını yapıştırıp **Run**. (Tek dosya: yönetim paneli, destek ve analiz tabloları da içinde.)
+Yeni proje → SQL Editor → `supabase/schema.sql` dosyasının tamamını yapıştırıp **Run**. (Tek dosya: yönetim paneli, destek, analiz, ziyaretçi filtresi ve kanal paylaşımı tabloları da içinde.) Daha önce kurduysanız yalnızca yeni parçayı: `supabase/posts.sql`.
 Project Settings → API → `SUPABASE_URL` ve **Secret key** (`sb_secret_...`).
 
 ### 3. Telegram
@@ -75,6 +75,7 @@ Panel → Entegrasyonlar → Pixel ID, Conversions API token ve test kodu. "Bağ
 - **Konuşmalar**: her sohbeti okuyun, 1–5 puan verin, not yazın — koçun en güçlü girdisi.
 - **Öğrenme**: her 10 biten konuşmada koç yeni bir rehber önerir; Telegram'da `/approve N` ya da panelden onaylayın.
 - **Destek**: ekran görüntüsü gönderen ya da insan isteyen müşteriler Telegram'ınıza "Cevapla / Çözüldü / Yapay zekâya öğret" düğmeleriyle düşer.
+- **Kanal Paylaşımları**: ücretsiz/VIP kanala post yazın (kalın, spoiler, alıntı, emoji, görsel), zamanlayın ya da hemen gönderin, şablon ve etiket kullanın. Plan düğmeleri botu açar → satış o paylaşıma yazılır; "bot mu sattı, kanal mı" ayrımı panelde. Gönderilen postun metni 1 saat sonra silinir, sayıları kalır. Zamanlama için `supabase/post_scheduler.sql` (her dakika).
 - **Analiz**: reklam harcamasını girin → CAC, ROAS, LTV, elde tutma; "Yapay zekâ yorumu" düğmesi ne yapmanız gerektiğini söyler.
 - Takip mesajları ücretsiz Vercel planında günde bir kez (Türkiye saatiyle 12:00) gider; saatlik gönderim için `supabase/optional_hourly_cron.sql`.
 

@@ -1,4 +1,4 @@
-import { BUSINESS, supportContact } from "../config/business";
+import { BUSINESS, getPlan, supportContact } from "../config/business";
 import { DIRECT_BUYING_REGEX, DIRECT_BUYING_SIGNALS, FUNNEL, META_EVENTS } from "../config/funnel";
 import { notifyAdmin } from "../lib/admin";
 import {
@@ -25,6 +25,7 @@ import { getActivePlaybook } from "../learning/playbook";
 import { permissionsFor, runSalesAgent, stageOf, type AgentOutput, type NextAction } from "./agent";
 import { TEXTS, tx } from "../config/texts";
 import { openTicket } from "./support";
+import { recordPostStart, singlePlanKeyboard, type PostRef } from "./posts";
 
 export type TelegramUser = { id: number; first_name?: string; username?: string; language_code?: string };
 
@@ -255,7 +256,7 @@ export async function runTurn(leadId: string, options: TurnOptions): Promise<voi
 /*  Entry points used by the webhook                                   */
 /* ------------------------------------------------------------------ */
 
-export async function handleStart(from: TelegramUser, chatId: number, token: string | null, onReplied?: () => Promise<void>): Promise<void> {
+export async function handleStart(from: TelegramUser, chatId: number, token: string | null, onReplied?: () => Promise<void>, post: PostRef | null = null): Promise<void> {
   const existing = await getLeadByTelegramId(from.id);
   let fromLink = token ? await getLeadByToken(token) : null;
 
@@ -274,7 +275,7 @@ export async function handleStart(from: TelegramUser, chatId: number, token: str
 
   let lead: Lead;
   if (existing && fromLink && existing.id !== fromLink.id) lead = await mergeLeads(existing, fromLink);
-  else lead = existing ?? fromLink ?? (await createLead({ source: "telegram_direct" }));
+  else lead = existing ?? fromLink ?? (await createLead(post ? { source: "telegram_channel", medium: "channel_post", campaign: `post:${post.id}` } : { source: "telegram_direct" }));
 
   const firstStart = !lead.telegram_user_id;
   lead = await updateLead(lead.id, {
@@ -285,7 +286,9 @@ export async function handleStart(from: TelegramUser, chatId: number, token: str
     language_code: from.language_code ?? lead.language_code,
     blocked: false,
     opted_out: false,
+    ...(post && !lead.origin && !lead.landing_url ? { origin: "channel_post", origin_post_id: post.id } : {}),
   });
+  if (post) await recordPostStart(post, lead);
 
   if (firstStart) {
     await assignExperiments(lead.id);
@@ -293,9 +296,29 @@ export async function handleStart(from: TelegramUser, chatId: number, token: str
     await sendMetaEvent({ ...META_EVENTS.botStarted, eventId: `lead_${lead.id}`, lead, contentName: "telegram_bot_started" });
   }
   await recordMessage(lead.id, "event", firstStart ? "Kişi botu ilk kez açtı (/start)." : "Kişi yeniden /start gönderdi.");
+  if (post) await recordMessage(lead.id, "event", `Kişi kanaldaki bir paylaşımın düğmesinden geldi (paylaşım #${post.id}${post.action ? `, düğme: ${post.action}` : ""}).`);
 
   if (lead.vip_active) {
     await sendToLead(lead, tx("alreadyVipStart"));
+    await onReplied?.();
+    return;
+  }
+
+  // Paylaşımdaki düğme bir plan / planlar / kanal istiyorsa yapay zekâyı beklemeden doğrudan ver.
+  if (post?.action) {
+    if (lead.do_not_sell) {
+      await sendToLead(lead, tx("doNotSell"));
+    } else if (post.action === "kanal") {
+      await sendToLead(lead, tx("canal"), { keyboard: freeChannelKeyboard() });
+      await updateLead(lead.id, { free_channel_invited: true, free_channel_invited_at: lead.free_channel_invited_at ?? new Date().toISOString() });
+    } else if (post.action === "planlar" || !getPlan(post.action)) {
+      await presentPlans(lead, "command");
+    } else {
+      const kb = singlePlanKeyboard(lead.start_token, post.action);
+      await sendToLead(lead, `${tx("plansIntro")}\n${tx("plansFooter")}`, { keyboard: kb ?? undefined });
+      await updateLead(lead.id, { plans_shown_count: lead.plans_shown_count + 1, ...(lead.stage === "NEW" || lead.stage === "DISCOVERY" || lead.stage === "FREE_INVITED" || lead.stage === "ENGAGED" ? { stage: "VIP_OFFERED" as const } : {}) });
+      await recordMessage(lead.id, "event", `${getPlan(post.action)?.name ?? post.action} planı düğmeyle gönderildi (kanal paylaşımı).`);
+    }
     await onReplied?.();
     return;
   }

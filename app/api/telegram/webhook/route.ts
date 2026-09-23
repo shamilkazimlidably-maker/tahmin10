@@ -1,6 +1,7 @@
 import { loadSettings } from "@/src/lib/settings";
 import { NextResponse, type NextRequest } from "next/server";
 import { BUSINESS } from "@/src/config/business";
+import { parsePostRef } from "@/src/sales/posts";
 import { getEnv } from "@/src/lib/env";
 import { db } from "@/src/lib/supabase";
 import { isAdminChat, notifyAdmin } from "@/src/lib/admin";
@@ -135,7 +136,8 @@ async function onMessage(m: Message, replied: () => Promise<void>): Promise<void
 
   if (command === "/start") {
     const token = text.split(/\s+/)[1] ?? null;
-    return handleStart(from, m.chat.id, token && /^[A-Za-z0-9_-]{10,64}$/.test(token) ? token : null, replied);
+    const post = parsePostRef(token);
+    return handleStart(from, m.chat.id, !post && token && /^[A-Za-z0-9_-]{10,64}$/.test(token) ? token : null, replied, post);
   }
 
   const found = await getLeadByTelegramId(from.id);

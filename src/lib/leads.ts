@@ -24,6 +24,8 @@ export type Lead = {
   client_ip: string | null;
   user_agent: string | null;
   landing_url: string | null;
+  origin: string | null;
+  origin_post_id: number | null;
 
   stage: Stage;
   score: number;
