@@ -4,7 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { LEARNING, type ExperimentMetric } from "@/src/config/funnel";
 import { analyticsAiHistory, getAnalytics, runAnalyticsAi, saveSpend, spDate } from "@/src/lib/analytics";
 import { purgeVisits, visitorStats } from "@/src/lib/visits";
-import { deleteFromChannel, deletePostRow, deleteTemplate, duplicatePost, editInChannel, pinInChannel, PostError, postsOverview, runDuePosts, savePost, saveTemplate, sendPost, uploadMedia, validatePost } from "@/src/sales/posts";
+import { deleteFromChannel, deletePostRow, deleteTemplate, duplicatePost, editInChannel, pinInChannel, PostError, postsOverview, runDuePosts, savePost, saveTemplate, sendPost, stopPoll, uploadMedia, validatePost } from "@/src/sales/posts";
 import { envProblems, getEnv, type Env } from "@/src/lib/env";
 import { deepseekJson } from "@/src/lib/deepseek";
 import { getLeadById, getLeadByTelegramId, recordEvent, recordMessage, updateLead, type Lead, type StoredMessage } from "@/src/lib/leads";
@@ -313,6 +313,9 @@ async function handle(action: string, body: any): Promise<unknown> {
       return { ok: true };
     case "post_delete_channel":
       await deleteFromChannel(Number(body.id));
+      return { ok: true };
+    case "post_stop_poll":
+      await stopPoll(Number(body.id));
       return { ok: true };
     case "post_pin":
       await pinInChannel(Number(body.id), body.pin !== false);

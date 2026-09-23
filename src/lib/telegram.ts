@@ -51,7 +51,7 @@ export async function tg<T = unknown>(method: string, body: Record<string, unkno
   throw new TelegramError(method, 429, "rate limited");
 }
 
-export type InlineKeyboard = { inline_keyboard: { text: string; url?: string; callback_data?: string }[][] };
+export type InlineKeyboard = { inline_keyboard: { text: string; url?: string; callback_data?: string; style?: "primary" | "success" | "danger" }[][] };
 
 export async function sendText(
   chatId: string | number,

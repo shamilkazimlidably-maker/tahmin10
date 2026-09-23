@@ -1,10 +1,10 @@
 /**
  * Telegram-HTML: yalnızca Telegram'ın kabul ettiği etiketler geçer, gerisi düz metin olur.
  * Hem sunucuda (göndermeden önce) hem panelde (önizleme) kullanılır; bağımlılığı yoktur.
- * İzinli: <b> <i> <u> <s> <tg-spoiler> <code> <pre> <blockquote> <a href="http(s)://…|tg://…">
+ * İzinli: <b> <i> <u> <s> <tg-spoiler> <code> <pre> <blockquote> <blockquote expandable> <a href="http(s)://…|tg://…">
  */
 const TAGS = new Set(["b", "i", "u", "s", "tg-spoiler", "code", "pre", "blockquote"]);
-const TAG_RE = /<\/?([a-z-]+)((?:\s+href="[^"<>]*")?)\s*>/gi;
+const TAG_RE = /<\/?([a-z-]+)((?:\s+href="[^"<>]*")?(?:\s+expandable)?)\s*>/gi;
 
 export function sanitizeTelegramHtml(input: string): string {
   const text = input.replace(/\r\n/g, "\n");
@@ -28,7 +28,7 @@ export function sanitizeTelegramHtml(input: string): string {
       keep = closing ? open.at(-1) === tag : true;
     }
     if (!keep) { out += escapeText(m[0]); continue; }
-    if (closing) { open.pop(); out += `</${tag}>`; } else { open.push(tag); out += `<${tag}>`; }
+    if (closing) { open.pop(); out += `</${tag}>`; } else { open.push(tag); out += tag === "blockquote" && /expandable/.test(attr) ? "<blockquote expandable>" : `<${tag}>`; }
   }
   out += escapeText(text.slice(last));
   while (open.length) out += `</${open.pop()}>`; // kapatılmamış etiketleri kapat
@@ -44,9 +44,17 @@ export function visibleLength(html: string): number {
   return sanitizeTelegramHtml(html).replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").length;
 }
 
+/** Paragraflar (boş satırla ayrılmış bloklar) arasına ayraç çizgisi koyar. Gönderirken ve önizlemede uygulanır; kaydedilen metin değişmez. */
+export function applyDivider(html: string, divider: string | null | undefined): string {
+  if (!divider?.trim()) return html;
+  const parts = html.replace(/\r\n/g, "\n").split(/\n[ \t]*\n+/).map((p) => p.trim()).filter(Boolean);
+  return parts.length > 1 ? parts.join(`\n${divider.trim()}\n`) : html;
+}
+
 /** Panel önizlemesi için tarayıcı HTML'i (spoiler ve alıntı stillenir). */
-export function previewHtml(html: string): string {
-  return sanitizeTelegramHtml(html)
+export function previewHtml(html: string, divider?: string | null): string {
+  return sanitizeTelegramHtml(applyDivider(html, divider))
+    .replace(/<blockquote expandable>/g, '<blockquote class="expandable">')
     .replace(/<tg-spoiler>/g, '<span class="tg-spoiler">').replace(/<\/tg-spoiler>/g, "</span>")
     .replace(/<a href="/g, '<a target="_blank" rel="noreferrer" href="')
     .replace(/\n/g, "<br/>");

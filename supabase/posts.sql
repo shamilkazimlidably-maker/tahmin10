@@ -64,6 +64,12 @@ alter table leads add column if not exists origin_post_id bigint;
 -- Ödeme hangi paylaşıma bağlandı (son 7 gün içindeki son düğme tıklaması).
 alter table payments add column if not exists post_id bigint;
 
+-- Paylaşım türü: 'message' (metin / görsel) ya da 'poll' (anket / bilgi yarışması).
+alter table channel_posts add column if not exists kind text not null default 'message';
+alter table channel_posts add column if not exists poll jsonb;
+alter table post_templates add column if not exists kind text not null default 'message';
+alter table post_templates add column if not exists poll jsonb;
+
 alter table channel_posts enable row level security;
 alter table post_templates enable row level security;
 alter table post_clicks enable row level security;

@@ -1612,56 +1612,68 @@ const SAFE_GROUPS: FlatGroup[] = [
 ];
 
 /* =====================================================================
- *  KANAL PAYLAŞIMLARI  (ücretsiz / VIP kanala post: yaz, biçimlendir, zamanla, şablon, post bazlı satış)
+ *  KANAL PAYLAŞIMLARI  (ücretsiz / VIP kanala post & anket: yaz, biçimlendir, zamanla, şablon, post bazlı satış)
  * ===================================================================== */
-type PBtn = { text: string; type: "plan" | "planlar" | "bot" | "free_channel" | "support" | "url"; value?: string };
-type PDraft = { id: number | null; templateId: number | null; channel: "free" | "vip"; title: string; tags: string; text: string; mediaType: "photo" | "video" | null; mediaPath: string | null; mediaUrl: string | null; buttons: PBtn[][]; options: { silent: boolean; protect: boolean; pin: boolean; noPreview: boolean }; scheduledLocal: string };
-const EMPTY_DRAFT: PDraft = { id: null, templateId: null, channel: "free", title: "", tags: "", text: "", mediaType: null, mediaPath: null, mediaUrl: null, buttons: [], options: { silent: false, protect: false, pin: false, noPreview: true }, scheduledLocal: "" };
-const EMOJIS = ["⚽", "🔥", "✅", "❌", "📊", "📈", "🎯", "👑", "💰", "🏆", "⭐️", "🚀", "⏰", "📌", "🗓️", "🇹🇷", "🥇", "🔒", "🆓", "👉", "💬", "🧠", "📣", "🎁", "⚠️", "💎", "🔑", "🏟️", "🧾", "📝", "1️⃣", "2️⃣", "3️⃣", "🟢", "🔴", "🟡", "➡️", "🔔", "🙌", "💪"];
+type PBtn = { text: string; type: "plan" | "planlar" | "bot" | "free_channel" | "support" | "url"; value?: string; style?: "primary" | "success" | "danger" | null };
+type PPoll = { question: string; options: string[]; multiple: boolean; quiz: boolean; correctIndex: number; explanation: string; closeAfterMinutes: number };
+type POpts = { silent: boolean; protect: boolean; pin: boolean; noPreview: boolean; previewAbove: boolean; previewLarge: boolean; mediaSpoiler: boolean; captionAbove: boolean; divider: string };
+type PDraft = { id: number | null; templateId: number | null; channel: "free" | "vip"; kind: "message" | "poll"; title: string; tags: string; text: string; mediaType: "photo" | "video" | null; mediaPath: string | null; mediaUrl: string | null; withButtons: boolean; buttons: PBtn[][]; options: POpts; poll: PPoll; scheduledLocal: string };
+const EMPTY_OPTS: POpts = { silent: false, protect: false, pin: false, noPreview: true, previewAbove: false, previewLarge: false, mediaSpoiler: false, captionAbove: false, divider: "" };
+const EMPTY_POLL: PPoll = { question: "", options: ["", ""], multiple: false, quiz: false, correctIndex: 0, explanation: "", closeAfterMinutes: 0 };
+const emptyDraft = (channel: "free" | "vip"): PDraft => ({ id: null, templateId: null, channel, kind: "message", title: "", tags: "", text: "", mediaType: null, mediaPath: null, mediaUrl: null, withButtons: false, buttons: [], options: { ...EMPTY_OPTS, protect: channel === "vip" }, poll: { ...EMPTY_POLL, options: ["", ""] }, scheduledLocal: "" });
+const EMOJIS = ["⚽", "🔥", "✅", "❌", "📊", "📈", "📉", "🎯", "👑", "💰", "🏆", "⭐️", "🚀", "⏰", "📌", "🗓️", "🇹🇷", "🥇", "🥈", "🔒", "🆓", "👉", "👇", "💬", "🧠", "📣", "🎁", "⚠️", "💎", "🔑", "🏟️", "🧾", "📝", "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "🟢", "🔴", "🟡", "🔵", "➡️", "🔔", "🙌", "💪", "🤝", "🎉", "🧤", "🥅", "🟨", "🟥", "⏱️", "📅", "🔎", "💯", "🚨", "❗", "❓", "✨"];
+const DIVIDERS = ["━━━━━━━━━━━━", "──────────────", "═══════════════", "- - - - - - - - - -", "· · · · · · · · · ·", "▬▬▬▬▬▬▬▬▬▬", "⸻"];
 const POST_STATUS_TR: Record<string, [string, "green" | "red" | "amber" | "blue" | undefined]> = { draft: ["Taslak", undefined], scheduled: ["Zamanlandı", "blue"], sending: ["Gönderiliyor", "amber"], sent: ["Gönderildi", "green"], failed: ["Başarısız", "red"] };
 const BTN_TYPE_TR: Record<PBtn["type"], string> = { plan: "Plan (ödeme)", planlar: "Tüm planlar", bot: "Botu başlat", free_channel: "Ücretsiz kanal", support: "Destek", url: "Web adresi" };
+const BTN_STYLE_TR: [PBtn["style"], string, string][] = [[null, "Varsayılan (gri)", "#e6ebe8"], ["primary", "Mavi", "#298acf"], ["success", "Yeşil", "#61c752"], ["danger", "Kırmızı", "#e05356"]];
 const istanbul = (iso?: string | null) => (iso ? new Date(iso).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "–");
 const toIso = (local: string) => (local ? new Date(`${local}:00+03:00`).toISOString() : null); // Türkiye sabit UTC+3
 const toLocal = (iso?: string | null) => { if (!iso) return ""; const d = new Date(new Date(iso).getTime() + 3 * 3600_000); return d.toISOString().slice(0, 16); };
 
 function ChannelPosts() {
+  const [chan, setChan] = useState<"free" | "vip">("free");
   const [ov, setOv] = useState<Any>(null);
-  const [d, setD] = useState<PDraft>(EMPTY_DRAFT);
+  const [d, setD] = useState<PDraft>(emptyDraft("free"));
   const [allow, setAllow] = useState(false);
-  const [filter, setFilter] = useState<{ channel: string; status: string; tag: string }>({ channel: "", status: "", tag: "" });
+  const [filter, setFilter] = useState<{ status: string; tag: string }>({ status: "", tag: "" });
   const [showEmoji, setShowEmoji] = useState(false);
   const [busy, run] = useBusy();
   const load = useCallback(() => run("load", async () => setOv(await api("posts_overview"))), [run]);
   useEffect(() => { load(); }, [load]);
   const up = (patch: Partial<PDraft>) => setD((x) => ({ ...x, ...patch }));
+  const reset = (channel = chan) => { setD(emptyDraft(channel)); setAllow(false); };
+  const switchChannel = (c: "free" | "vip") => { setChan(c); if (!d.id && !d.text && !d.mediaPath && !d.poll.question) setD(emptyDraft(c)); else up({ channel: c, options: { ...d.options, protect: c === "vip" ? true : d.options.protect } }); };
 
   /* --- editör yardımcıları --- */
   const ta = () => document.getElementById("post-editor") as HTMLTextAreaElement | null;
-  const replaceSel = (fn: (sel: string) => string, cursorOffset?: number) => {
+  const replaceSel = (fn: (sel: string) => string) => {
     const el = ta(); if (!el) return;
     const [a, b] = [el.selectionStart, el.selectionEnd];
-    const sel = el.value.slice(a, b);
-    const ins = fn(sel);
-    const next = el.value.slice(0, a) + ins + el.value.slice(b);
-    up({ text: next });
-    requestAnimationFrame(() => { el.focus(); const pos = cursorOffset !== undefined ? a + cursorOffset : a + ins.length; el.setSelectionRange(pos, pos); });
+    const ins = fn(el.value.slice(a, b));
+    up({ text: el.value.slice(0, a) + ins + el.value.slice(b) });
+    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(a + ins.length, a + ins.length); });
   };
   const wrap = (open: string, close: string, placeholder = "metin") => replaceSel((s) => `${open}${s || placeholder}${close}`);
   const insert = (t: string) => replaceSel(() => t);
   const link = () => { const url = window.prompt("Bağlantı adresi (https://…)"); if (url && /^https?:\/\//.test(url)) wrap(`<a href="${url}">`, "</a>", "bağlantı yazısı"); };
-  const matchBlock = () => insert("⚽ <b>Takım A – Takım B</b>\n🏆 Lig · 🕗 21:00\n📊 Market: <b>Alt/Üst 2.5</b>\n💬 Neden: kısa gerekçe\n");
-  const plansBlock = () => insert((ov?.plans ?? []).map((p: Any) => `👑 <b>${p.name}</b> — ${p.priceLabel}`).join("\n") + "\n");
-  const visible = (() => { const el = document.createElement("div"); el.innerHTML = previewHtml(d.text); return (el.textContent ?? "").length; })();
+  const matchBlock = () => insert("⚽ <b>Takım A – Takım B</b>\n🏆 Lig · 🕗 21:00\n📊 Market: <b>Alt/Üst 2.5</b>\n💬 Neden: kısa gerekçe\n\n");
+  const resultBlock = () => insert("📋 <b>Dünkü sonuçlar</b>\n✅ Takım A – Takım B · Üst 2.5\n❌ Takım C – Takım D · KG Var\n✅ Takım E – Takım F · MS 1\n\n");
+  const plansBlock = () => insert((ov?.plans ?? []).map((p: Any) => `👑 <b>${p.name}</b> — ${p.priceLabel}`).join("\n") + "\n\n");
+  const visible = (() => { const el = document.createElement("div"); el.innerHTML = previewHtml(d.text, d.options.divider); return (el.textContent ?? "").length; })();
   const limit = d.mediaPath ? 1024 : 4096;
 
   /* --- düğmeler --- */
-  const addButton = (rowIdx: number | null, b: PBtn) => setD((x) => { const rows = x.buttons.map((r) => [...r]); if (rowIdx === null || !rows[rowIdx] || rows[rowIdx]!.length >= 3) rows.push([b]); else rows[rowIdx]!.push(b); return { ...x, buttons: rows }; });
+  const addButton = (rowIdx: number | null, b: PBtn) => setD((x) => { const rows = x.buttons.map((r) => [...r]); if (rowIdx === null || !rows[rowIdx] || rows[rowIdx]!.length >= 3) rows.push([b]); else rows[rowIdx]!.push(b); return { ...x, buttons: rows, withButtons: true }; });
   const removeButton = (r: number, i: number) => setD((x) => { const rows = x.buttons.map((row) => [...row]); rows[r]!.splice(i, 1); return { ...x, buttons: rows.filter((row) => row.length) }; });
   const moveRow = (r: number, dir: -1 | 1) => setD((x) => { const rows = [...x.buttons]; const j = r + dir; if (j < 0 || j >= rows.length) return x; [rows[r], rows[j]] = [rows[j]!, rows[r]!]; return { ...x, buttons: rows }; });
-  const planPreset = () => setD((x) => ({ ...x, buttons: [...x.buttons, ...(ov?.plans ?? []).map((p: Any) => [{ text: `👑 ${p.name} · ${p.priceLabel}`, type: "plan" as const, value: p.key }])] }));
+  const planPreset = () => setD((x) => ({ ...x, withButtons: true, buttons: [...x.buttons, ...(ov?.plans ?? []).map((p: Any, i: number) => [{ text: `👑 ${p.name} · ${p.priceLabel}`, type: "plan" as const, value: p.key, style: (i === 0 ? "success" : "primary") as PBtn["style"] }])] }));
+
+  /* --- anket --- */
+  const setPoll = (patch: Partial<PPoll>) => up({ poll: { ...d.poll, ...patch } });
+  const setOpt = (i: number, v: string) => setPoll({ options: d.poll.options.map((o, j) => (j === i ? v : o)) });
 
   /* --- yükleme / kaydetme --- */
-  const payload = () => ({ id: d.id ?? undefined, templateId: d.templateId, channel: d.channel, title: d.title, tags: d.tags.split(",").map((t) => t.trim()).filter(Boolean), text: d.text, mediaType: d.mediaType, mediaPath: d.mediaPath, buttons: d.buttons, options: d.options, scheduledAt: toIso(d.scheduledLocal) });
+  const payload = () => ({ id: d.id ?? undefined, templateId: d.templateId, channel: d.channel, kind: d.kind, title: d.title, tags: d.tags.split(",").map((t) => t.trim()).filter(Boolean), text: d.text, mediaType: d.mediaType, mediaPath: d.mediaPath, buttons: d.withButtons ? d.buttons : [], options: d.options, poll: d.kind === "poll" ? { ...d.poll, options: d.poll.options.filter((o) => o.trim()) } : null, scheduledAt: toIso(d.scheduledLocal) });
   const upload = (file: File) => run("upload", async () => {
     if (file.size > 3_500_000) throw new Error("Dosya en fazla 3,5 MB olabilir; görseli küçültün.");
     const data = await new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = () => rej(new Error("Dosya okunamadı")); r.readAsDataURL(file); });
@@ -1671,95 +1683,153 @@ function ChannelPosts() {
   const save = (mode: "draft" | "schedule" | "send") => run(mode, async () => {
     if (mode === "send" && !window.confirm(`${d.channel === "vip" ? "VIP" : "Ücretsiz"} kanala ŞİMDİ gönderilsin mi?`)) return;
     const r = await api("post_save", { post: payload(), mode, allowClaims: allow });
-    if (mode === "draft") up({ id: r.post.id }); else { setD(EMPTY_DRAFT); setAllow(false); }
+    if (mode === "draft") up({ id: r.post.id }); else reset();
     await load();
   }, mode === "draft" ? "Taslak kaydedildi." : mode === "schedule" ? "Zamanlandı." : "Kanala gönderildi.");
   const saveTemplate = () => run("tpl", async () => { await api("template_save", { post: { ...payload(), id: undefined }, templateId: d.templateId, allowClaims: allow }); await load(); }, d.templateId ? "Şablon güncellendi." : "Şablon olarak kaydedildi.");
-  const editLive = () => run("live", async () => { await api("post_edit_live", { id: d.id, post: payload(), allowClaims: allow }); setD(EMPTY_DRAFT); await load(); }, "Kanaldaki mesaj güncellendi.");
+  const editLive = () => run("live", async () => { await api("post_edit_live", { id: d.id, post: payload(), allowClaims: allow }); reset(); await load(); }, "Kanaldaki mesaj güncellendi.");
   const loadInto = (p: Any, asTemplate = false) => {
-    setD({ id: asTemplate ? null : p.id, templateId: asTemplate ? p.id : p.template_id ?? null, channel: p.channel, title: asTemplate ? "" : p.title, tags: (p.tags ?? []).join(", "), text: p.text ?? "", mediaType: p.media_type, mediaPath: p.media_path, mediaUrl: p.media_path ? `${ov.mediaBase}${p.media_path}` : null, buttons: p.buttons ?? [], options: { silent: false, protect: false, pin: false, noPreview: true, ...(p.options ?? {}) }, scheduledLocal: toLocal(p.scheduled_at) });
+    setChan(p.channel);
+    setD({ id: asTemplate ? null : p.id, templateId: asTemplate ? p.id : p.template_id ?? null, channel: p.channel, kind: p.kind === "poll" ? "poll" : "message", title: asTemplate ? "" : p.title, tags: (p.tags ?? []).join(", "), text: p.text ?? "", mediaType: p.media_type, mediaPath: p.media_path, mediaUrl: p.media_path ? `${ov.mediaBase}${p.media_path}` : null, withButtons: (p.buttons ?? []).length > 0, buttons: p.buttons ?? [], options: { ...EMPTY_OPTS, ...(p.options ?? {}) }, poll: p.poll ? { ...EMPTY_POLL, ...p.poll } : { ...EMPTY_POLL, options: ["", ""] }, scheduledLocal: toLocal(p.scheduled_at) });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const act = (key: string, action: string, body: Record<string, unknown>, ok: string, confirmText?: string) => () => { if (confirmText && !window.confirm(confirmText)) return; run(key, async () => { await api(action, body); await load(); }, ok); };
 
   if (!ov) return <p className="a-help">Yükleniyor…</p>;
-  const posts: Any[] = ov.posts.filter((p: Any) => (!filter.channel || p.channel === filter.channel) && (!filter.status || p.status === filter.status) && (!filter.tag || (p.tags ?? []).includes(filter.tag)));
-  const allTags: string[] = [...new Set<string>(ov.posts.flatMap((p: Any) => p.tags ?? []))].sort();
+  const posts: Any[] = ov.posts.filter((p: Any) => p.channel === chan && (!filter.status || p.status === filter.status) && (!filter.tag || (p.tags ?? []).includes(filter.tag)));
+  const templates: Any[] = ov.templates.filter((t: Any) => t.channel === chan);
+  const allTags: string[] = [...new Set<string>(ov.posts.filter((p: Any) => p.channel === chan).flatMap((p: Any) => p.tags ?? []))].sort();
   const editingSent = Boolean(d.id && ov.posts.find((p: Any) => p.id === d.id)?.status === "sent");
   const src = ov.sources;
   const srcTotal = Object.values(src as Record<string, { n: number }>).reduce((t, x) => t + x.n, 0);
+  const chanPosts: Any[] = ov.posts.filter((p: Any) => p.channel === chan);
+  const sum = (k: string) => chanPosts.reduce((t: number, p: Any) => t + Number(p[k] ?? 0), 0);
+  const btnColor = (s: PBtn["style"]) => BTN_STYLE_TR.find((x) => x[0] === (s ?? null))?.[2] ?? "#e6ebe8";
 
   return (
     <>
-      <style>{`.pe-tb{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}.pe-tb button{border:1px solid #d5ddd8;background:#fff;border-radius:8px;padding:5px 9px;font-size:13px;cursor:pointer}.pe-tb button:hover{background:#eef3ef}.pe-emoji{display:grid;grid-template-columns:repeat(10,1fr);gap:4px;margin:6px 0 10px}.pe-emoji button{font-size:20px;border:0;background:#f4f7f5;border-radius:8px;padding:6px;cursor:pointer}#post-editor{width:100%;min-height:260px;font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;padding:10px;border:1px solid #d5ddd8;border-radius:10px;resize:vertical}.pe-prev{background:#e7ebe8;border-radius:14px;padding:14px}.pe-bubble{background:#fff;border-radius:6px 16px 16px 16px;padding:10px 12px;font-size:15px;line-height:1.45;max-width:420px;white-space:normal;word-break:break-word}.pe-bubble img,.pe-bubble video{max-width:100%;border-radius:10px;margin-bottom:8px;display:block}.pe-bubble blockquote{border-left:3px solid #0b7a3b;margin:6px 0;padding:2px 8px;color:#3c4a42}.pe-bubble code{background:#f1f4f2;padding:1px 4px;border-radius:4px}.pe-bubble pre{background:#f1f4f2;padding:8px;border-radius:8px;white-space:pre-wrap}.tg-spoiler{background:#333;color:#333;border-radius:4px}.tg-spoiler:hover{color:#fff}.pe-kb{display:grid;gap:6px;margin-top:8px;max-width:420px}.pe-kb div{display:flex;gap:6px}.pe-kb span{flex:1;text-align:center;background:#fff;border:1px solid #cfd8d2;border-radius:10px;padding:8px;font-size:14px;color:#1f6fd1}.pe-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:18px}@media(max-width:900px){.pe-grid{grid-template-columns:1fr}}`}</style>
+      <style>{`.pe-seg{display:flex;gap:6px;margin-bottom:14px}.pe-seg button{flex:1;padding:12px;border-radius:12px;border:2px solid #d5ddd8;background:#fff;font-weight:700;font-size:15px;cursor:pointer}.pe-seg button.on{border-color:#0b7a3b;background:#eaf6ee}.pe-seg button.vip.on{border-color:#b59500;background:#fff8d6}.pe-tb{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}.pe-tb button{border:1px solid #d5ddd8;background:#fff;border-radius:8px;padding:5px 9px;font-size:13px;cursor:pointer}.pe-tb button:hover{background:#eef3ef}.pe-emoji{display:grid;grid-template-columns:repeat(12,1fr);gap:4px;margin:6px 0 10px}.pe-emoji button{font-size:20px;border:0;background:#f4f7f5;border-radius:8px;padding:6px;cursor:pointer}#post-editor{width:100%;min-height:260px;font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;padding:10px;border:1px solid #d5ddd8;border-radius:10px;resize:vertical}.pe-prev{background:#e7ebe8;border-radius:14px;padding:14px;position:sticky;top:12px}.pe-bubble{background:#fff;border-radius:6px 16px 16px 16px;padding:10px 12px;font-size:15px;line-height:1.45;max-width:420px;white-space:normal;word-break:break-word}.pe-bubble img,.pe-bubble video{max-width:100%;border-radius:10px;margin-bottom:8px;display:block}.pe-bubble img.blur{filter:blur(14px)}.pe-bubble blockquote{border-left:3px solid #0b7a3b;margin:6px 0;padding:2px 8px;color:#3c4a42;background:#f3f7f4;border-radius:0 8px 8px 0}.pe-bubble blockquote.expandable::after{content:" ▾ (açılır alıntı)";color:#0b7a3b;font-size:12px}.pe-bubble code{background:#f1f4f2;padding:1px 4px;border-radius:4px}.pe-bubble pre{background:#f1f4f2;padding:8px;border-radius:8px;white-space:pre-wrap}.tg-spoiler{background:#333;color:#333;border-radius:4px}.tg-spoiler:hover{color:#fff}.pe-kb{display:grid;gap:6px;margin-top:8px;max-width:420px}.pe-kb div{display:flex;gap:6px}.pe-kb span{flex:1;text-align:center;border-radius:10px;padding:8px;font-size:14px;color:#123;border:1px solid #cfd8d2}.pe-kb span.c{color:#fff;border-color:transparent}.pe-poll{background:#fff;border-radius:6px 16px 16px 16px;padding:12px;max-width:420px}.pe-poll b{display:block;margin-bottom:6px}.pe-poll div{display:flex;gap:8px;align-items:center;padding:6px 0;border-top:1px solid #eef1ef}.pe-poll i{width:18px;height:18px;border-radius:50%;border:2px solid #9aa9a0;display:inline-block}.pe-poll i.ok{border-color:#0b7a3b;background:#0b7a3b}.pe-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:18px}@media(max-width:900px){.pe-grid{grid-template-columns:1fr}.pe-prev{position:static}}`}</style>
       <h1>Kanal Paylaşımları</h1>
-      <p className="a-intro">Ücretsiz ve VIP kanala paylaşımı buradan yazın, biçimlendirin, hemen gönderin ya da zamanlayın. Paylaşıma koyduğunuz plan düğmeleri botu açar ve kişiyi doğrudan ödemeye götürür; böylece <b>hangi paylaşım kaç satış getirdi</b> ve <b>kim bottan, kim kanaldan aldı</b> görürsünüz. Gönderilen paylaşımın metni ve görseli 1 saat sonra veritabanından silinir; başlık, etiket ve sayılar kalır.</p>
+      <p className="a-intro">İki bölüm: <b>ücretsiz kanal</b> ve <b>VIP kanal</b>. Paylaşımı yazın, biçimlendirin (yalnızca Telegram'ın desteklediği biçimler), anket ya da bilgi yarışması oluşturun, hemen gönderin ya da zamanlayın. Düğme isteğe bağlıdır; plan düğmeleri botu açar ve satış o paylaşıma yazılır. Gönderilen paylaşımın metni ve görseli 1 saat sonra veritabanından silinir; başlık, etiket ve sayılar kalır.</p>
       {ov.sqlMissing && <div className="a-warn">Paylaşım tabloları bulunamadı. Supabase → SQL Editor'de <b>supabase/posts.sql</b> dosyasını bir kez çalıştırın.</div>}
 
-      <div className="a-stats">
-        <div className="a-stat"><span>Kanal paylaşımından satış</span><b>{src.channel_post.n}</b><span>{tl(src.channel_post.revenue)} · {srcTotal ? `%${Math.round((src.channel_post.n / srcTotal) * 100)}` : "–"}</span></div>
-        <div className="a-stat"><span>Bot (reklamdan gelen)</span><b>{src.bot_ad.n}</b><span>{tl(src.bot_ad.revenue)}</span></div>
-        <div className="a-stat"><span>Bot (doğrudan gelen)</span><b>{src.bot_direct.n}</b><span>{tl(src.bot_direct.revenue)}</span></div>
-        <div className="a-stat"><span>Kişiye bağlanmamış</span><b>{src.unlinked.n}</b><span>{tl(src.unlinked.revenue)}</span></div>
+      <div className="pe-seg">
+        <button type="button" className={chan === "free" ? "on" : ""} onClick={() => switchChannel("free")}>📣 Ücretsiz kanal</button>
+        <button type="button" className={`vip ${chan === "vip" ? "on" : ""}`} onClick={() => switchChannel("vip")} disabled={!ov.hasVipChannel} title={ov.hasVipChannel ? "" : "TELEGRAM_VIP_CHANNEL_ID tanımlı değil"}>👑 VIP kanal{ov.hasVipChannel ? "" : " (ID tanımsız)"}</button>
       </div>
-      <p className="a-help" style={{ marginTop: -8, marginBottom: 14 }}>İlk ödemeler sayılır. “Kanal paylaşımından” = ödemeden önceki 7 gün içinde bir paylaşım düğmesine basmış ya da bota ilk kez bir paylaşımdan gelmiş.</p>
 
-      <Card title={d.id ? (editingSent ? `Kanaldaki paylaşımı düzenle (#${d.id})` : `Paylaşımı düzenle (#${d.id})`) : "Yeni paylaşım"} right={<div className="a-row"><select value={d.channel} onChange={(e) => up({ channel: e.target.value as "free" | "vip" })} disabled={editingSent}><option value="free">📣 Ücretsiz kanal</option><option value="vip" disabled={!ov.hasVipChannel}>👑 VIP kanal{ov.hasVipChannel ? "" : " (ID tanımsız)"}</option></select>{d.id || d.text || d.mediaPath ? <Btn small kind="soft" onClick={() => { setD(EMPTY_DRAFT); setAllow(false); }}>Temizle</Btn> : null}</div>}>
+      <div className="a-stats">
+        <div className="a-stat"><span>{chan === "vip" ? "VIP" : "Ücretsiz"} kanal paylaşımı</span><b>{chanPosts.filter((p: Any) => p.status === "sent").length}</b><span>{chanPosts.filter((p: Any) => p.status === "scheduled").length} zamanlanmış · {chanPosts.filter((p: Any) => p.status === "draft").length} taslak</span></div>
+        <div className="a-stat"><span>Düğmeden botu başlatan</span><b>{sum("starts")}</b><span>{sum("checkouts")} ödeme sayfası</span></div>
+        <div className="a-stat"><span>Bu kanalın paylaşımlarından satış</span><b>{sum("purchases")}</b><span>{tl(sum("revenue"))}</span></div>
+        <div className="a-stat"><span>Tüm satışlar: kanal / bot</span><b>{src.channel_post.n} / {src.bot_ad.n + src.bot_direct.n}</b><span>{srcTotal ? `kanal payı %${Math.round((src.channel_post.n / srcTotal) * 100)}` : "henüz satış yok"}{src.unlinked.n ? ` · ${src.unlinked.n} bağlanmamış` : ""}</span></div>
+      </div>
+
+      <Card title={d.id ? (editingSent ? `Kanaldaki paylaşımı düzenle (#${d.id})` : `Paylaşımı düzenle (#${d.id})`) : `Yeni paylaşım → ${chan === "vip" ? "👑 VIP kanal" : "📣 Ücretsiz kanal"}`} right={<div className="a-row">
+        <select value={d.kind} onChange={(e) => up({ kind: e.target.value as "message" | "poll" })} disabled={editingSent}><option value="message">💬 Mesaj (metin / görsel)</option><option value="poll">📊 Anket / bilgi yarışması</option></select>
+        {(d.id || d.text || d.mediaPath || d.poll.question) ? <Btn small kind="soft" onClick={() => reset()}>Temizle</Btn> : null}
+      </div>}>
         <div className="pe-grid">
           <div>
             <div className="a-row" style={{ marginBottom: 8 }}>
               <div style={{ flex: 1, minWidth: 180 }}><Field label="Başlık (yalnızca sizin için)"><input value={d.title} onChange={(e) => up({ title: e.target.value })} placeholder="ör. Günün tahmini 24.09" /></Field></div>
-              <div style={{ flex: 1, minWidth: 180 }}><Field label="Etiketler (virgülle)"><input value={d.tags} onChange={(e) => up({ tags: e.target.value })} placeholder="günün-tahmini, vip-hatırlatma" list="post-tags" /><datalist id="post-tags">{allTags.map((t) => <option key={t} value={t} />)}</datalist></Field></div>
+              <div style={{ flex: 1, minWidth: 180 }}><Field label="Etiketler (virgülle)"><input value={d.tags} onChange={(e) => up({ tags: e.target.value })} placeholder="günün-tahmini, sonuç, vip-hatırlatma" list="post-tags" /><datalist id="post-tags">{allTags.map((t) => <option key={t} value={t} />)}</datalist></Field></div>
             </div>
-            <div className="pe-tb">
-              <button type="button" title="Kalın" onClick={() => wrap("<b>", "</b>")}><b>B</b></button>
-              <button type="button" title="Eğik" onClick={() => wrap("<i>", "</i>")}><i>I</i></button>
-              <button type="button" title="Altı çizili" onClick={() => wrap("<u>", "</u>")}><u>U</u></button>
-              <button type="button" title="Üstü çizili" onClick={() => wrap("<s>", "</s>")}><s>S</s></button>
-              <button type="button" title="Spoiler (tıklayınca açılır)" onClick={() => wrap("<tg-spoiler>", "</tg-spoiler>")}>👁 Spoiler</button>
-              <button type="button" title="Kod (sabit genişlik)" onClick={() => wrap("<code>", "</code>")}>{"</>"}</button>
-              <button type="button" title="Alıntı bloğu" onClick={() => wrap("<blockquote>", "</blockquote>")}>❝ Alıntı</button>
-              <button type="button" title="Bağlantı" onClick={link}>🔗 Link</button>
-              <button type="button" onClick={() => insert("━━━━━━━━━━━━\n")}>━ Ayraç</button>
-              <button type="button" onClick={() => insert("• ")}>• Madde</button>
-              <button type="button" onClick={() => insert("✅ ")}>✅</button>
-              <button type="button" onClick={() => insert("❌ ")}>❌</button>
-              <button type="button" onClick={matchBlock}>⚽ Maç bloğu</button>
-              <button type="button" onClick={plansBlock}>👑 Planlar bloğu</button>
-              <button type="button" onClick={() => setShowEmoji((v) => !v)}>😀 Emoji</button>
-            </div>
-            {showEmoji && <div className="pe-emoji">{EMOJIS.map((e) => <button type="button" key={e} onClick={() => insert(e + " ")}>{e}</button>)}</div>}
-            <textarea id="post-editor" value={d.text} onChange={(e) => up({ text: e.target.value })} placeholder={"⚽ <b>Günün ücretsiz tahmini</b>\n\n…"} />
-            <p className="a-help" style={{ color: visible > limit ? C.red : undefined }}>{visible} / {limit} karakter{d.mediaPath ? " (görselli paylaşımda sınır 1024)" : ""} · Biçim: seçili metni seçip düğmeye basın. HTML etiketleri elle de yazabilirsiniz.</p>
 
-            <Field label="Görsel / video" help="JPG, PNG, WebP ya da MP4, en fazla 3,5 MB. Görselli paylaşımda metin, görselin altında “açıklama” olarak gider.">
-              <div className="a-row">
-                <input type="file" accept="image/jpeg,image/png,image/webp,video/mp4" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} disabled={busy === "upload" || editingSent} />
-                {d.mediaPath && <Btn small kind="danger" onClick={() => up({ mediaType: null, mediaPath: null, mediaUrl: null })} disabled={editingSent}>Görseli kaldır</Btn>}
-                {busy === "upload" && <span className="a-help">Yükleniyor…</span>}
-              </div>
-            </Field>
-
-            <Field label="Düğmeler" help="Plan düğmeleri botu açar ve kişiye o planın ödeme sayfasını verir; satış bu paylaşıma yazılır. Satır başına en fazla 3 düğme, en fazla 8 satır.">
-              {d.buttons.map((row, r) => (
-                <div key={r} className="a-row" style={{ marginBottom: 6, alignItems: "center" }}>
-                  <span className="a-help" style={{ width: 22 }}>{r + 1}.</span>
-                  {row.map((b, i) => <Pill key={i} tone={b.type === "plan" ? "green" : b.type === "url" ? "blue" : undefined}>{b.text} <span className="a-help">({BTN_TYPE_TR[b.type]}{b.type === "plan" ? `: ${PLAN_TR[b.value ?? ""] ?? b.value}` : ""})</span> <button type="button" onClick={() => removeButton(r, i)} style={{ border: 0, background: "none", cursor: "pointer" }}>✕</button></Pill>)}
-                  <Btn small kind="soft" onClick={() => moveRow(r, -1)}>↑</Btn><Btn small kind="soft" onClick={() => moveRow(r, 1)}>↓</Btn>
+            {d.kind === "poll" ? (
+              <div>
+                <Field label="Soru (en fazla 300 karakter)"><input value={d.poll.question} onChange={(e) => setPoll({ question: e.target.value })} maxLength={300} placeholder="Bu akşamki derbiyi kim kazanır?" /></Field>
+                <Field label="Seçenekler (2–10, her biri en fazla 100 karakter)">
+                  {d.poll.options.map((o, i) => (
+                    <div key={i} className="a-row" style={{ marginBottom: 6, alignItems: "center" }}>
+                      {d.poll.quiz && <input type="radio" name="correct" style={{ width: 18 }} checked={d.poll.correctIndex === i} onChange={() => setPoll({ correctIndex: i })} title="Doğru cevap" />}
+                      <input style={{ flex: 1 }} value={o} onChange={(e) => setOpt(i, e.target.value)} maxLength={100} placeholder={`${i + 1}. seçenek`} />
+                      {d.poll.options.length > 2 && <Btn small kind="danger" onClick={() => setPoll({ options: d.poll.options.filter((_, j) => j !== i), correctIndex: Math.min(d.poll.correctIndex, d.poll.options.length - 2) })}>✕</Btn>}
+                    </div>
+                  ))}
+                  {d.poll.options.length < 10 && <Btn small kind="soft" onClick={() => setPoll({ options: [...d.poll.options, ""] })}>+ Seçenek</Btn>}
+                </Field>
+                <div className="a-row" style={{ gap: 16, marginBottom: 10 }}>
+                  <label className="a-row" style={{ gap: 6, fontSize: 14 }}><input type="checkbox" style={{ width: 18 }} checked={d.poll.quiz} onChange={(e) => setPoll({ quiz: e.target.checked, multiple: false })} /> 🧠 Bilgi yarışması (doğru cevap işaretlenir)</label>
+                  {!d.poll.quiz && <label className="a-row" style={{ gap: 6, fontSize: 14 }}><input type="checkbox" style={{ width: 18 }} checked={d.poll.multiple} onChange={(e) => setPoll({ multiple: e.target.checked })} /> ☑️ Birden fazla seçilebilsin</label>}
                 </div>
-              ))}
-              <ButtonAdder plans={ov.plans} hasSupport={ov.hasSupport} onAdd={(b, sameRow) => addButton(sameRow && d.buttons.length ? d.buttons.length - 1 : null, b)} onPreset={planPreset} />
-            </Field>
+                {d.poll.quiz && <Field label="Açıklama (doğru/yanlış cevaptan sonra gösterilir, en fazla 200 karakter, isteğe bağlı)"><input value={d.poll.explanation} onChange={(e) => setPoll({ explanation: e.target.value })} maxLength={200} /></Field>}
+                <div style={{ width: 260 }}><Field label="Kaç dakika sonra kapansın? (0 = açık kalsın, en fazla 10)"><Num value={d.poll.closeAfterMinutes} min={0} max={10} onChange={(v) => setPoll({ closeAfterMinutes: Number(v) })} /></Field></div>
+                <p className="a-help">Kanal anketleri her zaman anonimdir. Sonuçlar Telegram'da anketin üstünde görünür; gönderdikten sonra soru değiştirilemez, yalnızca “Anketi kapat” yapılabilir.</p>
+              </div>
+            ) : (
+              <>
+                <div className="pe-tb">
+                  <button type="button" title="Kalın" onClick={() => wrap("<b>", "</b>")}><b>B</b></button>
+                  <button type="button" title="Eğik" onClick={() => wrap("<i>", "</i>")}><i>I</i></button>
+                  <button type="button" title="Altı çizili" onClick={() => wrap("<u>", "</u>")}><u>U</u></button>
+                  <button type="button" title="Üstü çizili" onClick={() => wrap("<s>", "</s>")}><s>S</s></button>
+                  <button type="button" title="Gizli metin — dokununca görünür" onClick={() => wrap("<tg-spoiler>", "</tg-spoiler>")}>👁 Gizli (spoiler)</button>
+                  <button type="button" title="Sabit genişlikli yazı" onClick={() => wrap("<code>", "</code>")}>{"</>"} Kod</button>
+                  <button type="button" title="Kod bloğu" onClick={() => wrap("<pre>", "</pre>", "satır 1\nsatır 2")}>▤ Blok</button>
+                  <button type="button" title="Alıntı bloğu" onClick={() => wrap("<blockquote>", "</blockquote>")}>❝ Alıntı</button>
+                  <button type="button" title="Uzun metin — kapalı gelir, dokununca açılır" onClick={() => wrap("<blockquote expandable>", "</blockquote>", "uzun analiz…")}>▾ Açılır alıntı</button>
+                  <button type="button" title="Bağlantı" onClick={link}>🔗 Link</button>
+                  <button type="button" onClick={() => insert(`${d.options.divider || DIVIDERS[0]}\n`)}>━ Çizgi</button>
+                  <button type="button" onClick={() => insert("• ")}>• Madde</button>
+                  <button type="button" onClick={() => insert("✅ ")}>✅</button>
+                  <button type="button" onClick={() => insert("❌ ")}>❌</button>
+                  <button type="button" onClick={matchBlock}>⚽ Maç bloğu</button>
+                  <button type="button" onClick={resultBlock}>📋 Sonuç bloğu</button>
+                  <button type="button" onClick={plansBlock}>👑 Planlar bloğu</button>
+                  <button type="button" onClick={() => setShowEmoji((v) => !v)}>😀 Emoji</button>
+                </div>
+                {showEmoji && <div className="pe-emoji">{EMOJIS.map((e) => <button type="button" key={e} onClick={() => insert(e + " ")}>{e}</button>)}</div>}
+                <textarea id="post-editor" value={d.text} onChange={(e) => up({ text: e.target.value })} placeholder={"⚽ <b>Günün ücretsiz tahmini</b>\n\nParagrafları boş satırla ayırın; “paragraf arası çizgi” seçiliyse aralarına otomatik çizgi konur."} />
+                <p className="a-help" style={{ color: visible > limit ? C.red : undefined }}>{visible} / {limit} karakter{d.mediaPath ? " (görselli paylaşımda sınır 1024)" : ""} · Metni seçip düğmeye basın; etiketleri elle de yazabilirsiniz. Telegram'ın desteklemediği hiçbir biçim gönderilmez.</p>
 
-            <div className="a-row" style={{ gap: 16, marginBottom: 10 }}>
-              {([["silent", "🔕 Sessiz gönder (bildirim çalmaz)"], ["protect", "🔒 İletmeyi ve kaydetmeyi engelle (VIP için önerilir)"], ["pin", "📌 Gönderince sabitle"], ["noPreview", "🔗 Bağlantı önizlemesini kapat"]] as const).map(([k, label]) => (
+                <div className="a-row" style={{ alignItems: "flex-end", marginBottom: 10 }}>
+                  <div style={{ width: 260 }}><Field label="Paragraflar arasına otomatik çizgi"><select value={d.options.divider} onChange={(e) => up({ options: { ...d.options, divider: e.target.value } })}><option value="">Yok</option>{DIVIDERS.map((x) => <option key={x} value={x}>{x}</option>)}</select></Field></div>
+                  <span className="a-help" style={{ paddingBottom: 12 }}>Boş satırla ayrılmış her bloğun arasına konur; kaydedilen metin değişmez, gönderirken eklenir.</span>
+                </div>
+
+                <Field label="Görsel / video (isteğe bağlı)" help="JPG, PNG, WebP ya da MP4, en fazla 3,5 MB. Görselli paylaşımda metin görselin altında (ya da üstünde) açıklama olarak gider.">
+                  <div className="a-row">
+                    <input type="file" accept="image/jpeg,image/png,image/webp,video/mp4" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} disabled={busy === "upload" || editingSent} />
+                    {d.mediaPath && <Btn small kind="danger" onClick={() => up({ mediaType: null, mediaPath: null, mediaUrl: null })} disabled={editingSent}>Görseli kaldır</Btn>}
+                    {busy === "upload" && <span className="a-help">Yükleniyor…</span>}
+                  </div>
+                  {d.mediaPath && <div className="a-row" style={{ gap: 16, marginTop: 6 }}>
+                    <label className="a-row" style={{ gap: 6, fontSize: 14 }}><input type="checkbox" style={{ width: 18 }} checked={d.options.mediaSpoiler} onChange={(e) => up({ options: { ...d.options, mediaSpoiler: e.target.checked } })} /> 🫥 Görsel bulanık gelsin (dokununca açılır)</label>
+                    <label className="a-row" style={{ gap: 6, fontSize: 14 }}><input type="checkbox" style={{ width: 18 }} checked={d.options.captionAbove} onChange={(e) => up({ options: { ...d.options, captionAbove: e.target.checked } })} /> ⬆️ Metin görselin üstünde</label>
+                  </div>}
+                </Field>
+              </>
+            )}
+
+            <label className="a-row" style={{ gap: 6, fontSize: 14, marginBottom: 6 }}><input type="checkbox" style={{ width: 18 }} checked={d.withButtons} onChange={(e) => up({ withButtons: e.target.checked })} /> <b>Bu paylaşımda düğme olsun</b> <span className="a-help">(kapalıysa düğmesiz gider)</span></label>
+            {d.withButtons && (
+              <Field label="Düğmeler" help="Plan düğmeleri botu açar ve kişiye o planın ödeme sayfasını verir; satış bu paylaşıma yazılır. Satır başına en fazla 3 düğme, en fazla 8 satır. Renk yalnızca güncel Telegram sürümlerinde görünür; eski sürümde gri kalır.">
+                {d.buttons.map((row, r) => (
+                  <div key={r} className="a-row" style={{ marginBottom: 6, alignItems: "center" }}>
+                    <span className="a-help" style={{ width: 22 }}>{r + 1}.</span>
+                    {row.map((b, i) => <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: btnColor(b.style), color: b.style ? "#fff" : "#123", borderRadius: 8, padding: "4px 10px", fontSize: 13 }}>{b.text} <small style={{ opacity: 0.85 }}>({BTN_TYPE_TR[b.type]}{b.type === "plan" ? `: ${PLAN_TR[b.value ?? ""] ?? b.value}` : ""})</small> <button type="button" onClick={() => removeButton(r, i)} style={{ border: 0, background: "none", cursor: "pointer", color: "inherit" }}>✕</button></span>)}
+                    <Btn small kind="soft" onClick={() => moveRow(r, -1)}>↑</Btn><Btn small kind="soft" onClick={() => moveRow(r, 1)}>↓</Btn>
+                  </div>
+                ))}
+                <ButtonAdder plans={ov.plans} hasSupport={ov.hasSupport} onAdd={(b, sameRow) => addButton(sameRow && d.buttons.length ? d.buttons.length - 1 : null, b)} onPreset={planPreset} />
+              </Field>
+            )}
+
+            <div className="a-row" style={{ gap: 16, marginBottom: 10, marginTop: 10 }}>
+              {([["silent", "🔕 Sessiz gönder"], ["protect", "🔒 İletme ve kaydetmeyi engelle"], ["pin", "📌 Gönderince sabitle"]] as const).map(([k, label]) => (
                 <label key={k} className="a-row" style={{ gap: 6, fontSize: 14 }}><input type="checkbox" style={{ width: 18 }} checked={d.options[k]} onChange={(e) => up({ options: { ...d.options, [k]: e.target.checked } })} /> {label}</label>
               ))}
+              {d.kind === "message" && !d.mediaPath && <>
+                <label className="a-row" style={{ gap: 6, fontSize: 14 }}><input type="checkbox" style={{ width: 18 }} checked={!d.options.noPreview} onChange={(e) => up({ options: { ...d.options, noPreview: !e.target.checked } })} /> 🔗 Link önizlemesi göster</label>
+                {!d.options.noPreview && <label className="a-row" style={{ gap: 6, fontSize: 14 }}><input type="checkbox" style={{ width: 18 }} checked={d.options.previewLarge} onChange={(e) => up({ options: { ...d.options, previewLarge: e.target.checked } })} /> büyük görsel</label>}
+                {!d.options.noPreview && <label className="a-row" style={{ gap: 6, fontSize: 14 }}><input type="checkbox" style={{ width: 18 }} checked={d.options.previewAbove} onChange={(e) => up({ options: { ...d.options, previewAbove: e.target.checked } })} /> metnin üstünde</label>}
+              </>}
             </div>
             <label className="a-row" style={{ gap: 6, fontSize: 13, marginBottom: 10 }}><input type="checkbox" style={{ width: 18 }} checked={allow} onChange={(e) => setAllow(e.target.checked)} /> Uyarıya rağmen gönder (metinde “banko / garanti / kesin” gibi ifadeler varsa)</label>
 
             {editingSent ? (
-              <div className="a-row"><Btn onClick={editLive} busy={busy === "live"}>Kanaldaki mesajı güncelle</Btn><span className="a-help">Gönderimden sonraki 1 saat içinde düzenlenebilir; görsel değiştirilemez.</span></div>
+              <div className="a-row"><Btn onClick={editLive} busy={busy === "live"}>Kanaldaki mesajı güncelle</Btn><span className="a-help">Gönderimden sonraki 1 saat içinde metin ve düğmeler düzenlenebilir; görsel ve anket sorusu değiştirilemez.</span></div>
             ) : (
               <div className="a-row" style={{ alignItems: "flex-end" }}>
                 <div style={{ width: 210 }}><Field label="Zamanla (Türkiye saati)"><input type="datetime-local" value={d.scheduledLocal} onChange={(e) => up({ scheduledLocal: e.target.value })} /></Field></div>
@@ -1772,35 +1842,43 @@ function ChannelPosts() {
           </div>
 
           <div>
-            <p className="a-help" style={{ marginBottom: 6 }}>Önizleme (Telegram'da böyle görünür)</p>
+            <p className="a-help" style={{ marginBottom: 6 }}>Önizleme — {chan === "vip" ? "👑 VIP kanal" : "📣 Ücretsiz kanal"}</p>
             <div className="pe-prev">
-              <div className="pe-bubble">
-                {d.mediaUrl && (d.mediaType === "video" ? <video src={d.mediaUrl} controls muted /> : <img src={d.mediaUrl} alt="" />)}
-                {d.text ? <div dangerouslySetInnerHTML={{ __html: previewHtml(d.text) }} /> : <span className="a-help">Metin yok</span>}
-              </div>
-              {d.buttons.length > 0 && <div className="pe-kb">{d.buttons.map((row, r) => <div key={r}>{row.map((b, i) => <span key={i}>{b.text}</span>)}</div>)}</div>}
+              {d.kind === "poll" ? (
+                <div className="pe-poll">
+                  <b>{d.poll.question || "Soru…"}</b>
+                  <span className="a-help">{d.poll.quiz ? "Bilgi yarışması" : d.poll.multiple ? "Anonim anket · çoklu seçim" : "Anonim anket"}</span>
+                  {d.poll.options.map((o, i) => <div key={i}><i className={d.poll.quiz && d.poll.correctIndex === i ? "ok" : ""} />{o || `${i + 1}. seçenek`}</div>)}
+                </div>
+              ) : (
+                <div className="pe-bubble">
+                  {d.mediaUrl && !d.options.captionAbove && (d.mediaType === "video" ? <video src={d.mediaUrl} controls muted /> : <img src={d.mediaUrl} alt="" className={d.options.mediaSpoiler ? "blur" : ""} />)}
+                  {d.text ? <div dangerouslySetInnerHTML={{ __html: previewHtml(d.text, d.options.divider) }} /> : <span className="a-help">Metin yok</span>}
+                  {d.mediaUrl && d.options.captionAbove && (d.mediaType === "video" ? <video src={d.mediaUrl} controls muted /> : <img src={d.mediaUrl} alt="" className={d.options.mediaSpoiler ? "blur" : ""} style={{ marginTop: 8, marginBottom: 0 }} />)}
+                </div>
+              )}
+              {d.withButtons && d.buttons.length > 0 && <div className="pe-kb">{d.buttons.map((row, r) => <div key={r}>{row.map((b, i) => <span key={i} className={b.style ? "c" : ""} style={{ background: btnColor(b.style) }}>{b.text}</span>)}</div>)}</div>}
             </div>
-            <p className="a-help" style={{ marginTop: 8 }}>Okunabilirlik için: ilk satıra kalın başlık + emoji, her maç için ayrı blok, ayraç çizgileri, en fazla 6–8 satır, sonuçlar için ✅ ❌, önemli sayıya <b>kalın</b>, uzun gerekçeyi alıntı bloğuna.</p>
+            <p className="a-help" style={{ marginTop: 8 }}>Okunabilirlik: ilk satırda kalın başlık + emoji; her maç ayrı blok, aralarına çizgi; en fazla 6–8 satır; sonuçlar ✅ ❌; önemli sayı <b>kalın</b>; uzun gerekçe “açılır alıntı”da; VIP'te tahmini “gizli” yapıp paylaşımı iletmeye kapatın.</p>
           </div>
         </div>
       </Card>
 
-      <Card title={`Şablonlar (${ov.templates.length})`} desc="Kalıcıdır, silinmez. “Kullan” metni editöre alır; değiştirip gönderin ya da zamanlayın.">
-        {!ov.templates.length && <p className="a-help">Henüz şablon yok. Yukarıda bir paylaşım yazıp “Şablon olarak kaydet” deyin.</p>}
+      <Card title={`${chan === "vip" ? "VIP" : "Ücretsiz"} kanal şablonları (${templates.length})`} desc="Kalıcıdır. “Kullan” içeriği editöre alır; değiştirip gönderin ya da zamanlayın.">
+        {!templates.length && <p className="a-help">Bu kanal için şablon yok. Yukarıda bir paylaşım yazıp “Şablon olarak kaydet” deyin.</p>}
         <div className="a-scroll"><table className="a-table"><tbody>
-          {ov.templates.map((t: Any) => <tr key={t.id}><td><b>{t.title}</b><br /><span className="a-help">{t.channel === "vip" ? "VIP" : "Ücretsiz"} · {(t.tags ?? []).map((x: string) => `#${x}`).join(" ")} · {t.uses} kez kullanıldı{t.media_path ? " · görselli" : ""}</span></td><td className="a-help" style={{ maxWidth: 420, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(t.text ?? "").replace(/<[^>]+>/g, "").slice(0, 120)}</td><td><div className="a-row"><Btn small onClick={() => loadInto(t, true)}>Kullan</Btn><Btn small kind="danger" onClick={act(`tdel${t.id}`, "template_delete", { id: t.id }, "Şablon silindi.", "Şablon silinsin mi?")}>Sil</Btn></div></td></tr>)}
+          {templates.map((t: Any) => <tr key={t.id}><td><b>{t.kind === "poll" ? "📊 " : ""}{t.title}</b><br /><span className="a-help">{(t.tags ?? []).map((x: string) => `#${x}`).join(" ")} · {t.uses} kez kullanıldı{t.media_path ? " · görselli" : ""}{(t.buttons ?? []).length ? " · düğmeli" : ""}</span></td><td className="a-help" style={{ maxWidth: 420, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.kind === "poll" ? t.poll?.question : String(t.text ?? "").replace(/<[^>]+>/g, "").slice(0, 120)}</td><td><div className="a-row"><Btn small onClick={() => loadInto(t, true)}>Kullan</Btn><Btn small kind="danger" onClick={act(`tdel${t.id}`, "template_delete", { id: t.id }, "Şablon silindi.", "Şablon silinsin mi?")}>Sil</Btn></div></td></tr>)}
         </tbody></table></div>
       </Card>
 
-      <Card title="Paylaşımlar" desc="Zamanlanmış, gönderilmiş ve taslak paylaşımlar; her birinin getirdiği başlatma, ödeme sayfası ve satış sayıları." right={<div className="a-row">
-        <select value={filter.channel} onChange={(e) => setFilter({ ...filter, channel: e.target.value })}><option value="">Tüm kanallar</option><option value="free">Ücretsiz</option><option value="vip">VIP</option></select>
+      <Card title={`${chan === "vip" ? "VIP" : "Ücretsiz"} kanal paylaşımları`} desc="Zamanlanmış, gönderilmiş ve taslaklar; her birinin getirdiği başlatma, ödeme sayfası ve satış sayıları." right={<div className="a-row">
         <select value={filter.status} onChange={(e) => setFilter({ ...filter, status: e.target.value })}><option value="">Tüm durumlar</option>{Object.entries(POST_STATUS_TR).map(([k, [l]]) => <option key={k} value={k}>{l}</option>)}</select>
         <select value={filter.tag} onChange={(e) => setFilter({ ...filter, tag: e.target.value })}><option value="">Tüm etiketler</option>{allTags.map((t) => <option key={t} value={t}>#{t}</option>)}</select>
         <Btn small kind="soft" onClick={() => run("due", async () => { const r = await api("post_run_due"); notify(`${r.sent} gönderildi, ${r.failed} başarısız, ${r.purged} içerik temizlendi.`); await load(); })} busy={busy === "due"}>Sırası gelenleri şimdi gönder</Btn>
       </div>}>
         <div className="a-scroll"><table className="a-table" style={{ minWidth: 980 }}><thead><tr><th>Paylaşım</th><th>Durum</th><th>Zaman</th><th>Başlatma</th><th>Ödeme sayfası</th><th>Satış</th><th>Gelir</th><th>Alanlar</th><th /></tr></thead><tbody>
           {posts.map((p: Any) => <tr key={p.id}>
-            <td><b>#{p.id} {p.title}</b><br /><span className="a-help">{p.channel === "vip" ? "👑 VIP" : "📣 Ücretsiz"} · {(p.tags ?? []).map((x: string) => `#${x}`).join(" ")}{p.content_purged ? " · metin silindi" : ""}{p.error ? ` · ${p.error}` : ""}</span></td>
+            <td><b>#{p.id} {p.kind === "poll" ? "📊 " : ""}{p.title}</b><br /><span className="a-help">{(p.tags ?? []).map((x: string) => `#${x}`).join(" ")}{p.content_purged ? " · metin silindi" : ""}{p.error ? ` · ${p.error}` : ""}</span></td>
             <td><Pill tone={POST_STATUS_TR[p.status]?.[1]}>{POST_STATUS_TR[p.status]?.[0] ?? p.status}</Pill></td>
             <td className="a-help">{p.status === "scheduled" ? `⏰ ${istanbul(p.scheduled_at)}` : p.sent_at ? istanbul(p.sent_at) : istanbul(p.created_at)}</td>
             <td>{p.starts}</td><td>{p.checkouts}</td><td><b>{p.purchases}</b></td><td>{tl(Number(p.revenue))}</td>
@@ -1808,8 +1886,9 @@ function ChannelPosts() {
             <td><div className="a-row" style={{ flexWrap: "nowrap" }}>
               {(p.status === "draft" || p.status === "scheduled" || p.status === "failed") && !p.content_purged && <Btn small onClick={() => loadInto(p)}>Düzenle</Btn>}
               {(p.status === "draft" || p.status === "scheduled" || p.status === "failed") && !p.content_purged && <Btn small kind="soft" onClick={act(`send${p.id}`, "post_send_now", { id: p.id }, "Gönderildi.", "Şimdi gönderilsin mi?")}>Gönder</Btn>}
-              {p.status === "sent" && !p.content_purged && <Btn small onClick={() => loadInto(p)}>Kanalda düzenle</Btn>}
-              {!p.content_purged && <Btn small kind="soft" onClick={act(`dup${p.id}`, "post_duplicate", { id: p.id }, "Kopyalandı (taslak).")}>Kopyala</Btn>}
+              {p.status === "sent" && !p.content_purged && p.kind !== "poll" && <Btn small onClick={() => loadInto(p)}>Kanalda düzenle</Btn>}
+              {p.status === "sent" && p.kind === "poll" && p.telegram_message_id && <Btn small kind="soft" onClick={act(`stop${p.id}`, "post_stop_poll", { id: p.id }, "Anket kapatıldı.", "Anket kapatılsın mı?")}>Anketi kapat</Btn>}
+              {(!p.content_purged || p.kind === "poll") && <Btn small kind="soft" onClick={act(`dup${p.id}`, "post_duplicate", { id: p.id }, "Kopyalandı (taslak).")}>Kopyala</Btn>}
               {p.status === "sent" && p.telegram_message_id && <Btn small kind="soft" onClick={act(`pin${p.id}`, "post_pin", { id: p.id, pin: true }, "Sabitlendi.")}>📌</Btn>}
               {p.status === "sent" && p.telegram_message_id && <Btn small kind="danger" onClick={act(`cdel${p.id}`, "post_delete_channel", { id: p.id }, "Kanaldan silindi.", "Mesaj kanaldan silinsin mi?")}>Kanaldan sil</Btn>}
               <Btn small kind="danger" onClick={act(`rdel${p.id}`, "post_delete_row", { id: p.id }, "Kayıt silindi.", "Kayıt ve sayıları silinsin mi? (Kanaldaki mesaj kalır.)")}>Kaydı sil</Btn>
@@ -1820,15 +1899,15 @@ function ChannelPosts() {
       </Card>
 
       <div className="a-grid2">
-        <Card title="Etiket performansı" desc="Hangi tür paylaşım satıyor? Aynı etiketi verdiğiniz paylaşımların toplamı.">
+        <Card title="Etiket performansı (iki kanal birlikte)" desc="Aynı etiketi verdiğiniz paylaşımların toplamı: hangi tür paylaşım satıyor?">
           <div className="a-scroll"><table className="a-table"><thead><tr><th>Etiket</th><th>Paylaşım</th><th>Başlatma</th><th>Satış</th><th>Gelir</th></tr></thead><tbody>
             {ov.tags.map((t: Any) => <tr key={t.tag}><td>#{t.tag}</td><td>{t.posts}</td><td>{t.starts}</td><td><b>{t.purchases}</b></td><td>{tl(t.revenue)}</td></tr>)}
             {!ov.tags.length && <tr><td colSpan={5} className="a-help">Etiketli paylaşım yok.</td></tr>}
           </tbody></table></div>
         </Card>
-        <Card title="Zamanlama nasıl çalışır?">
-          <p style={{ fontSize: 14 }}>Zamanlanmış paylaşımlar dakikası dakikasına gitsin diye Supabase her dakika siteye sorar. Bunun için <b>supabase/post_scheduler.sql</b> dosyasındaki YOUR-DOMAIN ve YOUR_CRON_SECRET alanlarını doldurup bir kez çalıştırın. Çalıştırmadıysanız paylaşımlar en geç günlük takip görevinde (12:00) ya da “Sırası gelenleri şimdi gönder” düğmesine bastığınızda gider.</p>
-          <p style={{ fontSize: 14, marginTop: 8 }}>Düğmeler botu <code>t.me/{ov.botUsername}?start=p&lt;no&gt;</code> ile açar. Kişi bota daha önce reklamdan gelmişse “Bot (reklam)” olarak kalır ama satış yine paylaşıma da yazılır.</p>
+        <Card title="Satış kaynağı ve zamanlama">
+          <p style={{ fontSize: 14 }}><b>Kanal paylaşımı:</b> {src.channel_post.n} satış · {tl(src.channel_post.revenue)} — <b>Bot (reklam):</b> {src.bot_ad.n} · {tl(src.bot_ad.revenue)} — <b>Bot (doğrudan):</b> {src.bot_direct.n} · {tl(src.bot_direct.revenue)}{src.unlinked.n ? ` — bağlanmamış: ${src.unlinked.n}` : ""}. İlk ödemeler sayılır; ödemeden önceki 7 gün içinde bir paylaşım düğmesine basılmışsa satış o paylaşıma yazılır.</p>
+          <p style={{ fontSize: 14, marginTop: 8 }}>Zamanlanmış paylaşımların dakikasında gitmesi için <b>supabase/post_scheduler.sql</b> çalıştırılmış olmalı. Düğmeler botu <code>t.me/{ov.botUsername}?start=p&lt;no&gt;</code> ile açar.</p>
         </Card>
       </div>
     </>
@@ -1839,16 +1918,19 @@ function ButtonAdder({ plans, hasSupport, onAdd, onPreset }: { plans: Any[]; has
   const [type, setType] = useState<PBtn["type"]>("plan");
   const [text, setText] = useState("");
   const [value, setValue] = useState(plans[0]?.key ?? "");
+  const [style, setStyle] = useState<PBtn["style"]>(null);
   const [sameRow, setSameRow] = useState(false);
-  const defaults: Record<PBtn["type"], string> = { plan: plans.find((p) => p.key === value) ? `👑 ${plans.find((p) => p.key === value).name} · ${plans.find((p) => p.key === value).priceLabel}` : "👑 VIP", planlar: "👑 VIP planlarını gör", bot: "💬 Bota yaz", free_channel: "📲 Ücretsiz kanala katıl", support: "🆘 Destek", url: "🔗 Aç" };
+  const plan = plans.find((p) => p.key === value);
+  const defaults: Record<PBtn["type"], string> = { plan: plan ? `👑 ${plan.name} · ${plan.priceLabel}` : "👑 VIP", planlar: "👑 VIP planlarını gör", bot: "💬 Bota yaz", free_channel: "📲 Ücretsiz kanala katıl", support: "🆘 Destek", url: "🔗 Aç" };
   return (
     <div className="a-row" style={{ alignItems: "flex-end", marginTop: 6 }}>
-      <div style={{ width: 160 }}><Field label="Tür"><select value={type} onChange={(e) => { setType(e.target.value as PBtn["type"]); setText(""); }}>{(Object.keys(BTN_TYPE_TR) as PBtn["type"][]).filter((t) => t !== "support" || hasSupport).map((t) => <option key={t} value={t}>{BTN_TYPE_TR[t]}</option>)}</select></Field></div>
-      {type === "plan" && <div style={{ width: 150 }}><Field label="Plan"><select value={value} onChange={(e) => setValue(e.target.value)}>{plans.map((p) => <option key={p.key} value={p.key}>{p.name}</option>)}</select></Field></div>}
-      {type === "url" && <div style={{ width: 220 }}><Field label="Adres"><input value={value.startsWith("http") ? value : ""} onChange={(e) => setValue(e.target.value)} placeholder="https://…" /></Field></div>}
-      <div style={{ width: 220 }}><Field label="Düğme yazısı"><input value={text} onChange={(e) => setText(e.target.value)} placeholder={defaults[type]} maxLength={40} /></Field></div>
+      <div style={{ width: 150 }}><Field label="Tür"><select value={type} onChange={(e) => { setType(e.target.value as PBtn["type"]); setText(""); }}>{(Object.keys(BTN_TYPE_TR) as PBtn["type"][]).filter((t) => t !== "support" || hasSupport).map((t) => <option key={t} value={t}>{BTN_TYPE_TR[t]}</option>)}</select></Field></div>
+      {type === "plan" && <div style={{ width: 140 }}><Field label="Plan"><select value={value} onChange={(e) => setValue(e.target.value)}>{plans.map((p) => <option key={p.key} value={p.key}>{p.name}</option>)}</select></Field></div>}
+      {type === "url" && <div style={{ width: 210 }}><Field label="Adres"><input value={value.startsWith("http") ? value : ""} onChange={(e) => setValue(e.target.value)} placeholder="https://…" /></Field></div>}
+      <div style={{ width: 200 }}><Field label="Düğme yazısı"><input value={text} onChange={(e) => setText(e.target.value)} placeholder={defaults[type]} maxLength={40} /></Field></div>
+      <div style={{ width: 150 }}><Field label="Renk"><select value={style ?? ""} onChange={(e) => setStyle((e.target.value || null) as PBtn["style"])}>{BTN_STYLE_TR.map(([v, l]) => <option key={v ?? "none"} value={v ?? ""}>{l}</option>)}</select></Field></div>
       <label className="a-row" style={{ gap: 6, fontSize: 13, paddingBottom: 10 }}><input type="checkbox" style={{ width: 18 }} checked={sameRow} onChange={(e) => setSameRow(e.target.checked)} /> aynı satıra</label>
-      <div className="a-field"><Btn small onClick={() => onAdd({ text: text.trim() || defaults[type], type, value: type === "plan" || type === "url" ? value : undefined }, sameRow)}>Düğme ekle</Btn></div>
+      <div className="a-field"><Btn small onClick={() => onAdd({ text: text.trim() || defaults[type], type, value: type === "plan" || type === "url" ? value : undefined, style }, sameRow)}>Düğme ekle</Btn></div>
       <div className="a-field"><Btn small kind="soft" onClick={onPreset}>Hazır: 3 plan düğmesi</Btn></div>
     </div>
   );
