@@ -232,7 +232,7 @@ export async function runSalesAgent(input: AgentInput): Promise<AgentOutput> {
     hits = findForbiddenClaims(parsed.messages.join("\n"));
     if (!hits.length) return { ...parsed, messages: ensureResultsDisclaimer(parsed.messages), guardrailHits: [] };
 
-    correction = `Sua resposta anterior violou regras (${hits.join(", ")}): "${parsed.messages.join(" ")}". Reescreva sem promessas, sem números inventados, sem urgência, sem links.`;
+    correction = `Önceki cevabın kuralları ihlal etti (${hits.join(", ")}): "${parsed.messages.join(" ")}". Aynı şeyi vaat etmeden, uydurma sayı kullanmadan, aciliyet yaratmadan ve link yazmadan yeniden yaz.`;
     if (attempt === 1) {
       // Still unsafe after a correction → send something harmless and flag it for the owner.
       return { ...parsed, messages: [TEXTS.safeFallback], next_action: "handoff_human", guardrailHits: hits };

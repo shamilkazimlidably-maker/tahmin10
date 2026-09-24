@@ -15,6 +15,8 @@ export type Stage =
   | "NOT_INTERESTED";
 
 export const FUNNEL = {
+  /** 1 = /start'a anında sabit karşılama + ücretsiz kanal düğmesi (yapay zekâ beklenmez). 0 = eski davranış (yapay zekâ selam verir). */
+  instantWelcome: 1,
   /** User replies before the AI is ALLOWED to invite to the free channel. */
   minRepliesBeforeFreeInvite: 2,
   /** User replies after which the invite is sent even if the AI did not choose to. */
@@ -188,6 +190,13 @@ export const FOLLOWUP_RULES: Record<string, FollowupRule[]> = {
     },
   ],
   ENGAGED: [
+    {
+      key: "engaged_0",
+      afterSilentHours: 5,
+      keyboard: "none",
+      goal: "They joined the free channel a few hours ago and never replied to the welcome. One short, friendly line: ask whether they saw the free tip in the channel and what they think. No VIP.",
+      fallback: "Kanaldaki günün tahminine göz atabildin mi? Ne düşündün? 🙂",
+    },
     {
       key: "engaged_1",
       afterSilentHours: 48,

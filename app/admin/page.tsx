@@ -674,6 +674,7 @@ function Assistant() {
  *  5. KURALLAR VE PUANLAMA
  * ===================================================================== */
 const RULE_TR: Record<string, [string, string]> = {
+  instantWelcome: ["/start'ta anında karşılama + kanal düğmesi (1 = açık, 0 = kapalı)", "Açıkken ilk /start'a yapay zekâ beklenmeden Hazır Mesajlar'daki karşılama metni ve ücretsiz kanal düğmesi gider. Kapalıyken yapay zekâ selam verir (5–10 sn sürer)."],
   minRepliesBeforeFreeInvite: ["Ücretsiz kanala davet için en az cevap", "Kişi bota en az bu kadar mesaj yazmadan bot kanala davet edemez."],
   forceFreeInviteAfterReplies: ["Bu kadar cevaptan sonra daveti zorunlu yap", "Bot unutsa bile sistem daveti kendisi gönderir."],
   minRepliesAfterJoinBeforeOffer: ["Kanala girdikten sonra VIP teklifi için en az cevap", "Kişi önce ücretsiz içeriği görsün, biraz konuşsun."],
@@ -690,7 +691,7 @@ const RULE_TR: Record<string, [string, string]> = {
   autoReleaseHours: ["Destek talebi kaç saat sahipsiz kalırsa bot devralsın", "Siz uyurken müşteri sessizlikte kalmasın diye. Talebe cevap yazarsanız yeniden açılır."],
   coachBatchSize: ["Kaç analiz birikince koç yeni öneri hazırlasın", "Az = sık ama zayıf kanıtlı öneriler."], defaultMinSamplePerVariant: ["A/B testinde varyant başına en az kişi", "Kazanan ilan etmek için gereken en küçük örnek."],
 };
-const FOLLOWUP_TR: Record<string, string> = { checkout_1: "Ödeme yarıda kaldı — 1. hatırlatma", checkout_2: "Ödeme yarıda kaldı — 2. ve son hatırlatma", offer_1: "VIP teklifinden sonra sustu — 1", offer_2: "VIP teklifinden sonra sustu — 2 (son)", free_1: "Kanala davet edildi, girmedi — 1", free_2: "Kanala davet edildi, girmedi — 2 (son)", engaged_1: "Kanalda ama sessiz — 1", engaged_2: "Kanalda ama sessiz — 2", discovery_1: "En başta sustu" };
+const FOLLOWUP_TR: Record<string, string> = { engaged_0: "Kanala girdi, hoş geldine cevap vermedi — kısa dürtme", checkout_1: "Ödeme yarıda kaldı — 1. hatırlatma", checkout_2: "Ödeme yarıda kaldı — 2. ve son hatırlatma", offer_1: "VIP teklifinden sonra sustu — 1", offer_2: "VIP teklifinden sonra sustu — 2 (son)", free_1: "Kanala davet edildi, girmedi — 1", free_2: "Kanala davet edildi, girmedi — 2 (son)", engaged_1: "Kanalda ama sessiz — 1", engaged_2: "Kanalda ama sessiz — 2", discovery_1: "En başta sustu" };
 
 function Rules() {
   const { s, draft: r, upd, save, reset, busy, dirty } = useSection("rules");
@@ -987,6 +988,9 @@ function System() {
         <Card title="Başarısız Telegram mesajları">
           {d.failedTelegram.map((t: Any) => <p key={t.update_id} style={{ fontSize: 13.5, marginBottom: 6 }}>#{t.update_id} · {when(t.created_at)} · {t.attempts} deneme<br /><span className="a-help">{t.error}</span></p>)}
           {!d.failedTelegram.length && <p className="a-help">Yok 👍</p>}
+          <h3 style={{ marginTop: 14 }}>Son yapay zekâ hataları (kişi “Bir saniye takıldım” gördü)</h3>
+          {(d.agentErrors ?? []).map((e: Any) => <p key={e.id} style={{ fontSize: 13.5, marginBottom: 6 }}>{when(e.created_at)} · {e.leads?.first_name ?? "?"}<br /><span className="a-help">{e.data?.message ?? JSON.stringify(e.data)}</span></p>)}
+          {!(d.agentErrors ?? []).length && <p className="a-help">Yok 👍</p>}
         </Card>
       </div>
     </>
@@ -1040,6 +1044,7 @@ type FlatGroup = { title: string; desc?: string; items: [string, string, string?
 
 const TEXT_GROUPS: FlatGroup[] = [
   { title: "Planlar ve VIP", items: [["plansIntro", "Plan listesinin başlığı"], ["plansFooter", "Plan listesinin altındaki açıklama", "Abonelik / otomatik yenileme bilgisini burada tutun.", 4], ["alreadyVipStart", "Zaten VIP olan biri /start yazınca"], ["alreadyVip", "Zaten VIP olan biri /planlar yazınca"], ["doNotSell", "Satış kapalı kişiye (yaş / risk)", "", 3]] },
+  { title: "Karşılama", desc: "Kişi bota ilk kez /start deyince yapay zekâ beklenmeden bu mesaj ve ücretsiz kanal düğmesi gider (Kurallar → “anında karşılama” açıksa). {name} = boşluk + kişinin adı (ad yoksa boş).", items: [["welcome", "İlk karşılama mesajı", "", 4]] },
   { title: "Ücretsiz kanal", items: [["freeInviteFallback", "Bot daveti unutursa sistemin gönderdiği davet", "", 3], ["canal", "/kanal komutunun cevabı"], ["joinConfirmed", "“Katıldım” → doğrulandı bildirimi"], ["joinNotFound", "“Katıldım” → kanalda bulunamadı uyarısı", "En fazla ~190 karakter gösterilir.", 2]] },
   { title: "Ses, resim ve destek", items: [["audioReply", "Sesli mesaj gelince", "", 2], ["imageReceived", "Resim gelince (size iletildi)", "", 3], ["imageNoTeam", "Resim gelince (yönetici sohbeti tanımlı değilse)", "", 2], ["ticketAck", "Destek talebi açıkken müşteri yazınca (saatte en fazla 1 kez)", "", 2], ["handoffContact", "İnsan istendiğinde destek kişisi", "{support} = destek kullanıcı adı"], ["nonTextReply", "Çıkartma / dosya / video gelince", "", 2]] },
   { title: "Ödeme ve erişim", items: [["vipDelivered", "Ödeme onaylandı (VIP linkiyle)", "{plan} = plan adı", 5], ["vipDeliveredNoLink", "Ödeme onaylandı (link yoksa)", "{plan} = plan adı", 5], ["vipEnded", "Abonelik bitti, VIP'ten çıkarıldı", "", 3], ["paymentFailed", "İlk ödeme reddedildi", "", 3]] },

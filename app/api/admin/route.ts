@@ -500,14 +500,15 @@ async function handle(action: string, body: any): Promise<unknown> {
     /* ---------------- system ---------------- */
     case "system": {
       const env = getEnv();
-      const [usage, webhook, failedWhop, failedTelegram] = await Promise.all([
+      const [usage, webhook, failedWhop, failedTelegram, agentErrors] = await Promise.all([
         db().rpc("db_usage").then((r) => r.data ?? null, () => null),
         tg<Record<string, unknown>>("getWebhookInfo", {}).catch((e) => ({ error: (e as Error).message })),
         rows(db().from("webhook_events").select("id, type, error, created_at").eq("status", "failed").order("created_at", { ascending: false }).limit(10)),
         rows(db().from("telegram_updates").select("update_id, error, attempts, created_at").eq("status", "failed").order("created_at", { ascending: false }).limit(10)),
+        rows(db().from("sales_events").select("id, created_at, data, leads(first_name, username)").eq("type", "AGENT_ERROR").order("created_at", { ascending: false }).limit(10)),
       ]);
       return {
-        envProblems: envProblems(), lastMetaError, usage, webhook, failedWhop, failedTelegram, appUrl: env.APP_URL, model: env.DEEPSEEK_MODEL,
+        envProblems: envProblems(), lastMetaError, usage, webhook, failedWhop, failedTelegram, agentErrors, appUrl: env.APP_URL, model: env.DEEPSEEK_MODEL,
         flags: { meta: Boolean(metaConfig().pixelId && metaConfig().token), metaTestMode: Boolean(metaConfig().testCode), whopApiKey: Boolean(env.WHOP_API_KEY), vipChannelId: Boolean(env.TELEGRAM_VIP_CHANNEL_ID), adminChat: Boolean(env.TELEGRAM_ADMIN_CHAT_ID), support: Boolean(settingsView().integrations.supportUsername || env.SUPPORT_USERNAME || env.SUPPORT_URL), ownPassword: Boolean(process.env.ADMIN_PASSWORD?.trim()), autoApprove: env.PLAYBOOK_AUTO_APPROVE },
       };
     }

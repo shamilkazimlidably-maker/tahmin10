@@ -18,7 +18,7 @@ import {
   type Lead,
 } from "../lib/leads";
 import { sendMetaEvent } from "../lib/meta";
-import { freeChannelKeyboard, plansKeyboard, sendText, sendTyping, TelegramError, type InlineKeyboard } from "../lib/telegram";
+import { isMemberOf, freeChannelKeyboard, plansKeyboard, sendText, sendTyping, TelegramError, type InlineKeyboard } from "../lib/telegram";
 import { hoursSince, sleep } from "../lib/util";
 import { assignExperiments, getLiveInstructions } from "../learning/experiments";
 import { getActivePlaybook } from "../learning/playbook";
@@ -26,6 +26,7 @@ import { permissionsFor, runSalesAgent, stageOf, type AgentOutput, type NextActi
 import { TEXTS, tx } from "../config/texts";
 import { openTicket } from "./support";
 import { isDirectBuying } from "../config/commands";
+import { getEnv } from "../lib/env";
 import { recordPostStart, singlePlanKeyboard, type PostRef } from "./posts";
 
 export type TelegramUser = { id: number; first_name?: string; username?: string; language_code?: string };
@@ -305,6 +306,16 @@ export async function handleStart(from: TelegramUser, chatId: number, token: str
     return;
   }
 
+  // Sabit karşılama: reklamdan gelen kişi ücretsiz kanal için gelmiştir — yapay zekâyı bekletmeden hemen düğmeyi ver.
+  if (firstStart && !post?.action && FUNNEL.instantWelcome && !lead.do_not_sell) {
+    await sendToLead(lead, tx("welcome", { name: lead.first_name ? ` ${lead.first_name}` : "" }), { keyboard: freeChannelKeyboard() });
+    await onReplied?.();
+    lead = await updateLead(lead.id, { free_channel_invited: true, free_channel_invited_at: new Date().toISOString(), stage: "FREE_INVITED", last_bot_message_at: new Date().toISOString() });
+    await recordMessage(lead.id, "event", "Karşılama mesajı ve ücretsiz kanal daveti anında (yapay zekâsız) gönderildi.");
+    await recordEvent(lead.id, "FREE_INVITE_SHOWN", { by: "welcome" });
+    return;
+  }
+
   // Paylaşımdaki düğme bir plan / planlar / kanal istiyorsa yapay zekâyı beklemeden doğrudan ver.
   if (post?.action) {
     if (lead.do_not_sell) {
@@ -352,13 +363,19 @@ export async function handleUserMessage(lead: Lead, text: string, telegramMessag
   }
   const returning = lead.last_user_message_at && hoursSince(lead.last_user_message_at) >= 12;
   await updateLead(lead.id, patch);
+  // Davet edildi ama "Katıldım" demedi: kişi yazınca üyeliği sessizce Telegram'dan kontrol et (chat_member bildirimi kaçmış olabilir).
+  if (lead.free_channel_invited && !lead.free_channel_joined && lead.telegram_user_id) {
+    const channelId = getEnv().TELEGRAM_FREE_CHANNEL_ID;
+    const joined = await isMemberOf(channelId, lead.telegram_user_id).catch(() => false);
+    if (joined) await handleFreeChannelJoined((await getLeadById(lead.id)) ?? lead, "auto", { silent: true });
+  }
   if (returning) await setSystemSignal(lead.id, "returned_to_bot", "Wrote again 12h+ after the previous message.");
   await recordEvent(lead.id, "MESSAGE_RECEIVED", { length: text.length, stage: lead.stage });
 
   await runTurn(lead.id, { userText: text, onReplied });
 }
 
-export async function handleFreeChannelJoined(lead: Lead, via: "button" | "auto"): Promise<void> {
+export async function handleFreeChannelJoined(lead: Lead, via: "button" | "auto", options: { silent?: boolean } = {}): Promise<void> {
   if (lead.free_channel_joined) return;
   lead = await updateLead(lead.id, {
     free_channel_invited: true,
@@ -371,10 +388,10 @@ export async function handleFreeChannelJoined(lead: Lead, via: "button" | "auto"
   await recordMessage(lead.id, "event", "Telegram doğruladı: kişi ücretsiz kanala girdi.");
   await sendMetaEvent({ ...META_EVENTS.freeJoined, eventId: `registration_${lead.id}`, lead, contentName: "free_channel", customData: { status: true } });
 
-  if (!lead.chat_id || lead.blocked || lead.opted_out) return;
+  if (!lead.chat_id || lead.blocked || lead.opted_out || options.silent) return;
   await runTurn(lead.id, {
     directive:
-      "Sistem kişinin ücretsiz kanala girdiğini doğruladı. Tek satırda hoş geldin de, orada ne bulacağını söyle (yalnızca BİLGİLER'de olanı) ve futbolla ilgili BİR soru sor. VIP'ten söz etme.",
+      "Sistem kişinin ücretsiz kanala girdiğini doğruladı. Sıcak ve kısa bir hoş geldin de (1 satır), kanalda ne bulacağını tek cümleyle söyle (yalnızca BİLGİLER'de olanı) ve sohbeti başlatmak için futbolla ilgili tek bir soru sor (tuttuğu takım ya da bu hafta takip ettiği maç). VIP'ten henüz söz etme; satış, kişi cevap vermeye başlayınca doğal olarak gelir.",
   });
 }
 

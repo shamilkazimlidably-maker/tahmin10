@@ -33,6 +33,7 @@ type Dict<T = unknown> = Record<string, T>;
 
 export const RULE_SPECS = {
   funnel: {
+    instantWelcome: [0, 1],
     minRepliesBeforeFreeInvite: [0, 10],
     forceFreeInviteAfterReplies: [1, 20],
     minRepliesAfterJoinBeforeOffer: [0, 10],

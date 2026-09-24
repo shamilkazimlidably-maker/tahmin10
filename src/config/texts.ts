@@ -6,6 +6,7 @@ import { BUSINESS } from "./business";
  * Değişkenler: {brand} {vip} {age} {frequency} — belirtilen yerlerde {plan} {support}.
  */
 export const TEXTS = {
+  welcome: "Selam{name}! 👋 Futbol tahmin kanalımıza girmek istiyorsun galiba — doğru yerdesin.\n\nÜcretsiz kanala katılmak için aşağıdaki düğmeye dokun; her gün veriye dayalı 1 tahmin geliyor. Katıldığını ben görüyorum; sonra hangi takımı tuttuğunu yaz, sohbet edelim 🙂",
   plansIntro: "{vip} planları:",
   plansFooter: "Hepsi aynı VIP erişimini veriyor — sadece süre değişiyor. Bunlar abonelik: otomatik yenilenir, Whop üzerinden istediğin an iptal edebilirsin.\n\nGüvenli ödeme sayfasını açmak için bir plana dokun 👇",
   freeInviteFallback: "Bu arada {brand}'un Telegram'da ücretsiz bir kanalı var. Bir göz atmak ister misin? Buraya dokunman yeterli 👇",
