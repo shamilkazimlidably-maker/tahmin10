@@ -142,18 +142,23 @@ function renderProfile(profile: Profile | null): string {
   return `# PROFİL (bu kişinin hafızası — kullan, aynı soruları tekrar sorma)\n${parts.length ? parts.join("\n") : "(henüz bilgi yok)"}`;
 }
 
-/** Stored history → chat messages. System events become bracketed user-side notes; same-role neighbours are merged. */
-function toChatHistory(history: StoredMessage[]): ChatMessage[] {
-  const out: ChatMessage[] = [];
+/**
+ * Stored history → chat messages. System events become bracketed user-side notes; same-role neighbours are merged.
+ * Assistant turns are shown in the SAME json shape the model must produce ({"messages":[...]}) — otherwise, after two
+ * plain-text examples, the model starts copying the plain-text pattern and stops answering with json.
+ */
+export function toChatHistory(history: StoredMessage[]): ChatMessage[] {
+  const out: { role: "user" | "assistant"; parts: string[] }[] = [];
   for (const m of history) {
     const role: "user" | "assistant" = m.role === "assistant" ? "assistant" : "user";
     const content = m.role === "event" ? `[SİSTEM OLAYI — kişinin sözü değil] ${m.content}` : m.content;
     const last = out[out.length - 1];
-    if (last && last.role === role) last.content += `\n${content}`;
-    else out.push({ role, content });
+    if (last && last.role === role) last.parts.push(content);
+    else out.push({ role, parts: [content] });
   }
-  if (out[0]?.role === "assistant") out.unshift({ role: "user", content: "[SİSTEM OLAYI — kişinin sözü değil] (konuşmanın başı atlandı)" });
-  return out;
+  const chat: ChatMessage[] = out.map((m) => ({ role: m.role, content: m.role === "assistant" ? JSON.stringify({ messages: m.parts.slice(-2) }) : m.parts.join("\n") }));
+  if (chat[0]?.role === "assistant") chat.unshift({ role: "user", content: "[SİSTEM OLAYI — kişinin sözü değil] (konuşmanın başı atlandı)" });
+  return chat;
 }
 
 export type AgentInput = {
@@ -189,6 +194,9 @@ function buildMessages(input: AgentInput, correction?: string): ChatMessage[] {
   if (!history.length || history[history.length - 1]!.role !== "user") {
     history.push({ role: "user", content: "[SİSTEM OLAYI — kişinin sözü değil] Talimata göre bir sonraki mesajı yaz." });
   }
+  // Biçim hatırlatması en sonda: uzun sohbetlerde model sistem promptunu unutup düz metin yazmaya başlıyor.
+  const last = history[history.length - 1]!;
+  last.content += "\n\n[Sistem: cevabını yalnızca ÇIKTI BİÇİMİ'ndeki json nesnesi olarak ver; düz metin yazma.]";
 
   return [
     // Static block first → identical prefix on every call → DeepSeek prompt-cache hits.

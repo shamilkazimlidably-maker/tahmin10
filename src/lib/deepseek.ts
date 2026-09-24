@@ -45,6 +45,8 @@ function parseLooseJson(text: string): unknown {
   // Kesilmiş / bozuk JSON: en azından "messages" dizisini kurtar (kişi cevapsız kalmasın).
   const salvaged = salvageMessages(cleaned);
   if (salvaged) return salvaged;
+  // Model JSON yerine düz metin yazdıysa (biçimi unuttu): metni mesaj olarak kullan, konuşma kopmasın.
+  if (!cleaned.includes("{") && cleaned.length > 0 && cleaned.length <= 1500) return { messages: [cleaned], _salvaged: true, _plain: true };
   throw new Error("Model did not return JSON.");
 }
 
