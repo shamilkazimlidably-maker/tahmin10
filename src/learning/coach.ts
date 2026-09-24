@@ -4,7 +4,7 @@ import { getEnv } from "../lib/env";
 import { INTEGRATION_OVERRIDES } from "../lib/integrations";
 import { db, must } from "../lib/supabase";
 import { notifyAdmin } from "../lib/admin";
-import { COACH_PROMPT } from "../config/prompts";
+import { PROMPT_TEXTS } from "../config/prompts";
 import { LEARNING, type ExperimentMetric } from "../config/funnel";
 import { getActivePlaybook, playbookContentSchema, savePlaybook, validateProposal } from "./playbook";
 import { createExperiment, listExperiments } from "./experiments";
@@ -123,7 +123,7 @@ export async function runCoach(options: { force?: boolean } = {}): Promise<Coach
   const env = getEnv();
   const { json } = await deepseekJson({
     messages: [
-      { role: "system", content: COACH_PROMPT + OWNER_REVIEWS_NOTE },
+      { role: "system", content: PROMPT_TEXTS.coach + OWNER_REVIEWS_NOTE },
       { role: "user", content: `DATA (json):\n${JSON.stringify(input)}` },
     ],
     model: INTEGRATION_OVERRIDES.deepseekCoachModel || env.DEEPSEEK_COACH_MODEL || INTEGRATION_OVERRIDES.deepseekModel || env.DEEPSEEK_MODEL,

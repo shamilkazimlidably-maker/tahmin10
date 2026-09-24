@@ -1,6 +1,7 @@
 import { SUPPORT } from "../config/funnel";
 import { supportContact } from "../config/business";
 import { tx } from "../config/texts";
+import { PROMPT_TEXTS } from "../config/prompts";
 import { deepseekJson } from "../lib/deepseek";
 import { getEnv } from "../lib/env";
 import { getLeadById, getRecentMessages, recordEvent, recordMessage, updateLead, type Lead } from "../lib/leads";
@@ -185,8 +186,7 @@ async function teach(ticket: Ticket, lead: Lead, note: string): Promise<void> {
     messages: [
       {
         role: "system",
-        content:
-          'You turn a business owner\'s note about a customer-support case into a reusable knowledge entry for a Turkish Telegram sales bot. Reply ONLY with a json object {"issue":"...","solution":"..."} written in Turkish. "issue": how a customer would describe the problem, max 200 characters. "solution": what the bot should tell the customer to do, short plain-text steps, max 450 characters, no URLs starting with http, no promises about betting results, never recommend a betting site. Use ONLY what the note (and, if needed, the conversation) says. If the note contains no solution, set "solution" to "".',
+        content: PROMPT_TEXTS.teach,
       },
       { role: "user", content: `OWNER NOTE:\n${note.slice(0, 2000)}\n\nCONVERSATION (context only):\n${context.slice(-3000)}` },
     ],

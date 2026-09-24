@@ -4,6 +4,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { LEARNING, type ExperimentMetric } from "@/src/config/funnel";
 import { analyticsAiHistory, getAnalytics, runAnalyticsAi, saveSpend, spDate } from "@/src/lib/analytics";
 import { purgeVisits, visitorStats } from "@/src/lib/visits";
+import { explainClaims, findForbiddenClaims, isOptOut } from "@/src/sales/guardrails";
+import { isDirectBuying } from "@/src/config/commands";
 import { deleteFromChannel, deletePostRow, deleteTemplate, duplicatePost, editInChannel, pinInChannel, PostError, postsOverview, runDuePosts, savePost, saveTemplate, sendPost, stopPoll, uploadMedia, validatePost } from "@/src/sales/posts";
 import { envProblems, getEnv, type Env } from "@/src/lib/env";
 import { deepseekJson } from "@/src/lib/deepseek";
@@ -14,7 +16,7 @@ import { lastMetaError, sendMetaEvent, testMetaConnection } from "@/src/lib/meta
 import { META_EVENTS } from "@/src/config/funnel";
 import { loadSettings, resetSection, saveKnowledge, saveSection, SettingsError, settingsView, type SettingsSection } from "@/src/lib/settings";
 import { db } from "@/src/lib/supabase";
-import { registerWebhook, sendText, tg } from "@/src/lib/telegram";
+import { registerWebhook, sendText, tg, registerCommands } from "@/src/lib/telegram";
 import { clientIp, safeEqual } from "@/src/lib/util";
 import { createExperiment, listExperiments, setExperimentStatus } from "@/src/learning/experiments";
 import { purgeOldData, runLearningCycle } from "@/src/learning/pipeline";
@@ -204,7 +206,7 @@ async function handle(action: string, body: any): Promise<unknown> {
     case "settings_save":
     case "settings_reset": {
       const section = String(body.section) as SettingsSection;
-      if (!["business", "prompts", "rules", "texts", "landing", "safe", "gate", "integrations"].includes(section)) bad("Bilinmeyen bölüm.");
+      if (!["business", "prompts", "rules", "texts", "landing", "safe", "gate", "integrations", "prompts_full", "guard", "theme", "commands"].includes(section)) bad("Bilinmeyen bölüm.");
       if (action === "settings_save") await saveSection(section, body.value);
       else await resetSection(section);
       await recordEvent(null, action === "settings_save" ? "ADMIN_SETTINGS_SAVED" : "ADMIN_SETTINGS_RESET", { section });
@@ -285,6 +287,14 @@ async function handle(action: string, body: any): Promise<unknown> {
     case "payment_link": {
       const lead = (await getLeadByTelegramId(String(body.telegram_id ?? "").trim())) ?? bad("Bu Telegram ID ile botu başlatmış kimse yok.");
       return { message: await linkPaymentToLead(String(body.payment_id), lead) };
+    }
+
+    case "commands_sync":
+      await registerCommands();
+      return { ok: true };
+    case "guard_test": {
+      const t = String(body.text ?? "").slice(0, 2000);
+      return { claims: findForbiddenClaims(t), explain: explainClaims(t), optOut: isOptOut(t), directBuying: isDirectBuying(t) };
     }
 
     /* ---------------- channel posts ---------------- */

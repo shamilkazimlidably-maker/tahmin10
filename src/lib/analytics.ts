@@ -1,4 +1,5 @@
 import { BUSINESS } from "../config/business";
+import { PROMPT_TEXTS } from "../config/prompts";
 import { deepseekJson } from "./deepseek";
 import { getEnv } from "./env";
 import { INTEGRATION_OVERRIDES } from "./integrations";
@@ -204,23 +205,6 @@ export async function saveSpend(input: { from: string; to: string; campaign: str
 /*  "Yapay zekâ analizi": the numbers go in, a prioritised action list comes out */
 /* ------------------------------------------------------------------ */
 
-const AI_PROMPT = `You are the growth analyst for a small Turkish business that sells a football-predictions (iddaa tips) Telegram subscription (free channel → AI sales bot → paid VIP via Whop, traffic from Meta ads). The owner is not a data person.
-You receive a JSON snapshot of their analytics. Give an HONEST, specific diagnosis and a short prioritised action list.
-
-Rules:
-- Use ONLY the numbers given. If a number is missing or the sample is tiny (for example fewer than ~30 leads or fewer than ~5 customers), say clearly that it is too early to conclude and what volume is needed. Never invent benchmarks as facts; if you mention a typical range, label it as a rough rule of thumb.
-- Find the single biggest leak in the funnel (largest relative drop) and start there.
-- Judge profitability with CAC vs revenue per customer / LTV and ROAS; if spend is 0 or missing, say unit economics cannot be judged until ad spend is entered.
-- Every action must be something the owner can do in THIS product: landing page copy, ad creative/targeting/budget, free-channel content, bot prompts / playbook / A/B tests, follow-up timing, plan pricing or mix, support speed, refund/churn handling, entering missing data.
-- Forbidden advice: fake urgency or scarcity, invented results or testimonials, guarantees of winnings, pressuring people who said no, targeting minors or people with gambling problems, encouraging bigger bets, recommending betting sites.
-- Write EVERYTHING in Turkish, plain language, short sentences, amounts in Turkish lira (₺).
-
-Reply ONLY with a json object:
-{"ozet":"3-5 cümle","saglik":"iyi|orta|zayıf|veri_yetersiz","en_buyuk_kayip":"huninin hangi adımı ve neden önemli","iyi_gidenler":["..."],"sorunlar":["..."],
- "oneriler":[{"oncelik":1,"baslik":"...","neden":"hangi sayıya dayanıyor","nasil":"panelde / reklamda tam olarak ne yapılacak","beklenen_etki":"...","zorluk":"kolay|orta|zor"}],
- "izlenecek_sayilar":["bir sonraki hafta hangi sayıya bakılmalı"],"eksik_veri":["..."]}
-Give 3 to 6 items in "oneriler", ordered by priority.`;
-
 export async function runAnalyticsAi(data: Analytics): Promise<Record<string, unknown>> {
   const env = getEnv();
   const compact = {
@@ -229,7 +213,7 @@ export async function runAnalyticsAi(data: Analytics): Promise<Record<string, un
     extra: data.extra, conversion_by_playbook_version: data.playbooks, plans: BUSINESS.plans.map((p) => ({ key: p.key, price: p.price })),
   };
   const { json } = await deepseekJson({
-    messages: [{ role: "system", content: AI_PROMPT }, { role: "user", content: `ANALYTICS (json):\n${JSON.stringify(compact)}` }],
+    messages: [{ role: "system", content: PROMPT_TEXTS.analytics }, { role: "user", content: `ANALYTICS (json):\n${JSON.stringify(compact)}` }],
     model: INTEGRATION_OVERRIDES.deepseekCoachModel || env.DEEPSEEK_COACH_MODEL || INTEGRATION_OVERRIDES.deepseekModel || env.DEEPSEEK_MODEL,
     thinking: true, maxTokens: 5000, timeoutMs: 170_000, retries: 1, label: "analytics-ai",
   });

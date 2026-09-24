@@ -2,6 +2,7 @@ import { loadSettings } from "@/src/lib/settings";
 import { NextResponse, type NextRequest } from "next/server";
 import { BUSINESS } from "@/src/config/business";
 import { parsePostRef } from "@/src/sales/posts";
+import { COMMANDS } from "@/src/config/commands";
 import { getEnv } from "@/src/lib/env";
 import { db } from "@/src/lib/supabase";
 import { isAdminChat, notifyAdmin } from "@/src/lib/admin";
@@ -147,13 +148,13 @@ async function onMessage(m: Message, replied: () => Promise<void>): Promise<void
     const lead = (await getLeadById(found.id)) ?? found;
     if (lead.chat_id !== String(m.chat.id)) await updateLead(lead.id, { chat_id: String(m.chat.id) });
 
-    if (command === "/dur" || command === "/parar" || command === "/stop" || (!command && isOptOut(text))) {
+    if (command === `/${COMMANDS.stop}` || command === "/dur" || command === "/parar" || command === "/stop" || (!command && isOptOut(text))) {
       await recordMessage(lead.id, "user", text.slice(0, 200), m.message_id);
       await handleOptOut(lead);
-    } else if (command === "/planlar" || command === "/planos" || command === "/vip") {
+    } else if (command === `/${COMMANDS.plans}` || command === "/planlar" || command === "/planos" || command === "/vip") {
       await recordMessage(lead.id, "user", text, m.message_id);
       await handlePlansCommand(lead);
-    } else if (command === "/kanal" || command === "/canal") {
+    } else if (command === `/${COMMANDS.channel}` || command === "/kanal" || command === "/canal") {
       await recordMessage(lead.id, "user", text, m.message_id);
       if (lead.do_not_sell) await sendToLead(lead, tx("doNotSell"));
       else {

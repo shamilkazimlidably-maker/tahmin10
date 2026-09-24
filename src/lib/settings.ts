@@ -4,9 +4,12 @@ import { FOLLOWUPS, FOLLOWUP_RULES, FUNNEL, LEARNING, META_EVENTS, RETENTION, SI
 import { LANDING, LANDING_OPTIONAL_KEYS } from "../config/landing";
 import { SAFE, SAFE_OPTIONAL_KEYS } from "../config/safe";
 import { GATE, type GateSettings } from "../config/gate";
+import { GUARD, type GuardRule, type GuardSettings } from "../config/guard";
+import { THEME, isHex, type ThemeSettings } from "../config/theme";
+import { COMMANDS, type CommandSettings } from "../config/commands";
 import { TEXTS } from "../config/texts";
 import { INTEGRATION_OVERRIDES } from "./integrations";
-import { lockedPromptPart, PROMPT_BLOCKS, salesAgentStaticPrompt, STAGE_INSTRUCTIONS, SUPPORT_KB, type KnowledgeEntry, type PromptBlockKey } from "../config/prompts";
+import { lockedPromptPart, PROMPT_BLOCKS, PROMPT_TEXTS, salesAgentStaticPrompt, STAGE_INSTRUCTIONS, SUPPORT_KB, type KnowledgeEntry, type PromptBlockKey } from "../config/prompts";
 import { findForbiddenClaims } from "../sales/guardrails";
 import { db } from "./supabase";
 
@@ -140,6 +143,10 @@ const LANDING_OPTIONAL = new Set<string>(LANDING_OPTIONAL_KEYS);
 const D_SAFE = { ...SAFE } as Dict<string>;
 const SAFE_OPTIONAL = new Set<string>(SAFE_OPTIONAL_KEYS);
 const D_GATE: GateSettings = { ...GATE };
+const D_PTEXTS = { ...PROMPT_TEXTS } as Dict<string>;
+const D_GUARD: GuardSettings = JSON.parse(JSON.stringify(GUARD));
+const D_THEME: ThemeSettings = { ...THEME };
+const D_COMMANDS = { ...COMMANDS } as Dict<string>;
 
 export type StoredIntegrations = {
   metaPixelId?: string; metaAccessToken?: string; metaTestEventCode?: string; supportUsername?: string;
@@ -152,6 +159,10 @@ export type StoredSettings = {
   landing?: Dict<string>;
   safe?: Dict<string>;
   gate?: Partial<GateSettings>;
+  prompts_full?: Dict<string>;
+  guard?: Partial<GuardSettings>;
+  theme?: Partial<ThemeSettings>;
+  commands?: Dict<string>;
   integrations?: StoredIntegrations;
   business?: unknown;
   prompts?: { blocks?: Dict<string>; stages?: Dict<string> };
@@ -188,6 +199,10 @@ function applyStored(s: StoredSettings): void {
   for (const k of Object.keys(D_LANDING)) (LANDING as Dict<string>)[k] = text(s.landing?.[k], 1200, LANDING_OPTIONAL.has(k)) ?? D_LANDING[k]!;
   for (const k of Object.keys(D_SAFE)) (SAFE as Dict<string>)[k] = text(s.safe?.[k], 3000, SAFE_OPTIONAL.has(k)) ?? D_SAFE[k]!;
   Object.assign(GATE, D_GATE, cleanGate(s.gate ?? {}));
+  for (const k of Object.keys(D_PTEXTS)) (PROMPT_TEXTS as Dict<string>)[k] = text(s.prompts_full?.[k], 12000) ?? D_PTEXTS[k]!;
+  Object.assign(GUARD, cleanGuard(s.guard ?? {}));
+  Object.assign(THEME, cleanTheme(s.theme ?? {}));
+  for (const k of Object.keys(D_COMMANDS)) (COMMANDS as Dict<string>)[k] = text(s.commands?.[k], 2000) ?? D_COMMANDS[k]!;
 
   const it = s.integrations ?? {};
   const o = INTEGRATION_OVERRIDES;
@@ -278,6 +293,56 @@ export class SettingsError extends Error {
   }
 }
 
+const wordListStr = (v: unknown, d: string, max = 3000) => (typeof v === "string" ? v.replace(/\s*,\s*/g, ", ").trim().slice(0, max) : d);
+const bool = (x: unknown, d: boolean) => (typeof x === "boolean" ? x : x === "true" ? true : x === "false" ? false : d);
+
+/** Güvenlik filtresi ayarlarını temizler. */
+function cleanGuard(v: Partial<GuardSettings>, strict = false): GuardSettings {
+  const problems: string[] = [];
+  const rules: GuardRule[] = [];
+  const seen = new Set<string>();
+  for (const r of Array.isArray(v.rules) ? v.rules.slice(0, 80) : D_GUARD.rules) {
+    const id = String(r?.id ?? "").trim().toLowerCase().replace(/[^a-z0-9_]/g, "_").slice(0, 40) || "custom";
+    const label = String(r?.label ?? "").trim().slice(0, 60) || id;
+    const kind = r?.kind === "regex" ? "regex" : "word";
+    const value = String(r?.value ?? "").trim().slice(0, 400);
+    if (!value) continue;
+    if (kind === "regex") { try { new RegExp(value, "g"); } catch { problems.push(`“${label}” düzenli ifadesi geçersiz.`); continue; } }
+    const key = `${kind}:${value}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rules.push({ id, label, kind, value, enabled: bool(r?.enabled, true), weakNegation: bool(r?.weakNegation, false) });
+  }
+  let optOutPhrases = wordListStr(v.optOutPhrases, D_GUARD.optOutPhrases);
+  for (const ph of optOutPhrases.split(",").map((x) => x.trim()).filter(Boolean)) { try { new RegExp(ph); } catch { problems.push(`“Mesaj istemiyor” kalıbı geçersiz: ${ph}`); optOutPhrases = D_GUARD.optOutPhrases; break; } }
+  if (strict && problems.length) throw new SettingsError(problems);
+  return {
+    enabled: bool(v.enabled, D_GUARD.enabled), rules,
+    negationAfter: wordListStr(v.negationAfter, D_GUARD.negationAfter), negationWeak: wordListStr(v.negationWeak, D_GUARD.negationWeak), negationBefore: wordListStr(v.negationBefore, D_GUARD.negationBefore),
+    optOutWhole: wordListStr(v.optOutWhole, D_GUARD.optOutWhole), optOutPhrases,
+    checkStats: bool(v.checkStats, D_GUARD.checkStats), resultWords: wordListStr(v.resultWords, D_GUARD.resultWords), promoWords: wordListStr(v.promoWords, D_GUARD.promoWords), checkLinks: bool(v.checkLinks, D_GUARD.checkLinks),
+  };
+}
+
+/** Tasarım ayarlarını temizler. */
+function cleanTheme(v: Partial<ThemeSettings>, strict = false): ThemeSettings {
+  const problems: string[] = [];
+  const out = { ...D_THEME } as Dict<unknown>;
+  for (const k of Object.keys(D_THEME) as (keyof ThemeSettings)[]) {
+    const d = D_THEME[k]; const x = (v as Dict<unknown>)[k];
+    if (x === undefined || x === null) continue;
+    if (typeof d === "boolean") out[k] = bool(x, d);
+    else if (typeof d === "number") { const n = Number(x); out[k] = Number.isFinite(n) ? Math.max(0, Math.min(k === "lpMutedOpacity" ? 100 : 60, Math.round(n))) : d; }
+    else if (k.endsWith("CustomCss")) out[k] = String(x).slice(0, 8000);
+    else if (k === "lpFontDisplay") out[k] = ["condensed", "system", "serif", "rounded", "mono"].includes(String(x)) ? String(x) : d;
+    else if (k === "lpFontBody") out[k] = ["system", "serif", "rounded", "mono"].includes(String(x)) ? String(x) : d;
+    else if (k === "lpHeroLayout") out[k] = x === "stack" ? "stack" : "side";
+    else { const c = String(x).trim().toLowerCase(); if (isHex(c)) out[k] = c; else problems.push(`Renk kodu #rrggbb biçiminde olmalı (${k}: “${String(x)}”).`); }
+  }
+  if (strict && problems.length) throw new SettingsError(problems);
+  return out as unknown as ThemeSettings;
+}
+
 /** Ziyaretçi filtresi ayarlarını temizler; strict=true ise hatalı değerde SettingsError fırlatır. */
 function cleanGate(v: Partial<GateSettings>, strict = false): GateSettings {
   const problems: string[] = [];
@@ -325,6 +390,35 @@ export function validateSection(section: SettingsSection, value: unknown): unkno
     return { blocks, stages };
   }
   if (section === "gate") return cleanGate((value ?? {}) as Partial<GateSettings>, true);
+  if (section === "guard") return cleanGuard((value ?? {}) as Partial<GuardSettings>, true);
+  if (section === "theme") return cleanTheme((value ?? {}) as Partial<ThemeSettings>, true);
+  if (section === "prompts_full") {
+    const v = (value ?? {}) as Dict<unknown>;
+    const out: Dict<string> = {};
+    const problems: string[] = [];
+    const must: Dict<string[]> = { analyst: ['"outcome"', '"loss_reason"', '"quality"', '"summary"'], coach: ['"playbook"', '"guidelines"', '"changes"', '"experiment_proposals"'], teach: ['"issue"', '"solution"'], followup: ['"messages"'], analytics: ['"oneriler"', '"ozet"'] };
+    for (const k of Object.keys(D_PTEXTS)) {
+      const t = text(v[k], 12000, false);
+      if (t === null || t === undefined) { problems.push(`“${k}” boş olamaz; silmek yerine “Varsayılana dön” kullanın.`); continue; }
+      for (const need of must[k] ?? []) if (!t.includes(need)) problems.push(`“${k}” metninde ${need} alanı kalmalı; yoksa sistem cevabı okuyamaz.`);
+      out[k] = t;
+    }
+    if (problems.length) throw new SettingsError(problems);
+    return out;
+  }
+  if (section === "commands") {
+    const v = (value ?? {}) as Dict<unknown>;
+    const out: Dict<string> = {};
+    const problems: string[] = [];
+    for (const k of Object.keys(D_COMMANDS)) {
+      const t: string = text(v[k], 2000, false) ?? D_COMMANDS[k] ?? "";
+      if (["plans", "channel", "stop"].includes(k) && !/^[a-z0-9_]{1,32}$/.test(t)) problems.push(`Komut adı yalnızca küçük harf, rakam ve _ içerebilir (${k}: “${t}”).`);
+      out[k] = t;
+    }
+    if (new Set([out.plans, out.channel, out.stop, "start"]).size < 4) problems.push("Komut adları birbirinden farklı olmalı.");
+    if (problems.length) throw new SettingsError(problems);
+    return out;
+  }
   if (section === "texts" || section === "landing" || section === "safe") {
     const defaults = section === "texts" ? D_TEXTS : section === "landing" ? D_LANDING : D_SAFE;
     const v = (value ?? {}) as Dict<string>;
@@ -428,7 +522,7 @@ export function settingsView() {
   };
   return {
     ...live,
-    defaults: { texts: D_TEXTS, landing: D_LANDING, safe: D_SAFE, gate: D_GATE, business: D.business, prompts: { blocks: D.blocks, stages: D.stages }, rules: { ...D.rules, weights: D.weights, followupRules: D.followupRules } },
+    defaults: { texts: D_TEXTS, landing: D_LANDING, safe: D_SAFE, gate: D_GATE, prompts_full: D_PTEXTS, guard: D_GUARD, theme: D_THEME, commands: D_COMMANDS, business: D.business, prompts: { blocks: D.blocks, stages: D.stages }, rules: { ...D.rules, weights: D.weights, followupRules: D.followupRules } },
     specs: RULE_SPECS,
     signals: signalRows.map((s) => ({ key: s.key, source: s.source, description: s.description })),
     followupBuckets: Object.fromEntries(Object.entries(FOLLOWUP_RULES).map(([bucket, rules]) => [bucket, rules.map((r) => ({ key: r.key, keyboard: r.keyboard }))])),
@@ -436,6 +530,10 @@ export function settingsView() {
     landing: { ...LANDING } as Dict<string>,
     safe: { ...SAFE } as Dict<string>,
     gate: { ...GATE },
+    prompts_full: { ...PROMPT_TEXTS } as Dict<string>,
+    guard: JSON.parse(JSON.stringify(GUARD)) as GuardSettings,
+    theme: { ...THEME },
+    commands: { ...COMMANDS } as Dict<string>,
     integrations: {
       metaPixelId: INTEGRATION_OVERRIDES.metaPixelId ?? "",
       metaAccessToken: "", // never leaves the server

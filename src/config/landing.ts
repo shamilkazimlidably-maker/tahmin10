@@ -18,6 +18,14 @@ export const LANDING = {
   previewTitle: "Sana böyle gelir",
   previewLabel: "Günün ücretsiz tahmini",
   previewCaption: "Biçim örneğidir. Gerçek tahmin her gün kanalda paylaşılır.",
+  previewAvatar: "10",
+  previewSmall: "kanal",
+  previewRow1: "Maç",
+  previewRow2: "Market",
+  previewRow3: "Neden",
+  previewTime: "her gün",
+  brandMark: "",
+  ageBadge: "",
   howTitle: "Nasıl çalışır?",
   step1Title: "Düğmeye dokun",
   step1Text: "Telegram, {brand} asistanıyla bir sohbette açılır.",
@@ -45,6 +53,6 @@ export type LandingKey = keyof typeof LANDING;
 
 /** Panelde boş bırakılabilen satırlar; boşsa o öğe sayfadan kalkar. */
 export const LANDING_OPTIONAL_KEYS: LandingKey[] = [
-  "eyebrow", "headlineHighlight", "headline2", "micro", "trust1", "trust2", "trust3", "fallbackHint", "previewCaption", "stickyText",
+  "eyebrow", "headlineHighlight", "headline2", "micro", "trust1", "trust2", "trust3", "fallbackHint", "previewCaption", "stickyText", "brandMark", "ageBadge", "previewSmall", "previewTime",
   "faq1Q", "faq1A", "faq2Q", "faq2A", "faq3Q", "faq3A", "faq4Q", "faq4A",
 ];

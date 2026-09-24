@@ -76,12 +76,13 @@ Panel → Entegrasyonlar → Pixel ID, Conversions API token ve test kodu. "Bağ
 - **Öğrenme**: her 10 biten konuşmada koç yeni bir rehber önerir; Telegram'da `/approve N` ya da panelden onaylayın.
 - **Destek**: ekran görüntüsü gönderen ya da insan isteyen müşteriler Telegram'ınıza "Cevapla / Çözüldü / Yapay zekâya öğret" düğmeleriyle düşer.
 - **Kanal Paylaşımları**: ücretsiz/VIP kanala post yazın (kalın, spoiler, alıntı, emoji, görsel), zamanlayın ya da hemen gönderin, şablon ve etiket kullanın. Plan düğmeleri botu açar → satış o paylaşıma yazılır; "bot mu sattı, kanal mı" ayrımı panelde. Gönderilen postun metni 1 saat sonra silinir, sayıları kalır. Zamanlama için `supabase/post_scheduler.sql` (her dakika).
+- **Gelişmiş Ayarlar**: promptun sabit kuralları ve tüm yapay zekâ talimatları (analist, koç, takip, öğretme, analiz), güvenlik filtresinin her kuralı (kapat/sil/ekle, olumsuzluk ve “mesaj istemiyorum” kelimeleri, test kutusu), tasarım (renkler, yazı tipi, bölüm görünürlükleri, serbest CSS; Veri Merkezi sayfası dahil), bot komut adları ve “satın alma” anahtar kelimeleri. Hepsinde “Varsayılana dön”.
 - **Analiz**: reklam harcamasını girin → CAC, ROAS, LTV, elde tutma; "Yapay zekâ yorumu" düğmesi ne yapmanız gerektiğini söyler.
 - Takip mesajları ücretsiz Vercel planında günde bir kez (Türkiye saatiyle 12:00) gider; saatlik gönderim için `supabase/optional_hourly_cron.sql`.
 
 ## Güvenlik kuralları (kodda, değiştirilemez)
 
-Bot asla: "banko", "kesin", "garanti", "risksiz" demez; sonuç, yorum, kampanya ya da kontenjan uydurmaz; kaybı telafi etmeye teşvik etmez; **hiçbir bahis sitesi önermez ya da adını vermez**; 18 yaş altına ya da kumar sorunu işareti gösterenlere satış yapmaz (YEDAM 115'e yönlendirir); "DUR" yazana bir daha yazmaz; link yazmaz. Bu kurallar `src/sales/guardrails.ts` dosyasında uygulanır ve koçun önerilerine de aynı filtre uygulanır.
+Bot asla: "banko", "kesin", "garanti", "risksiz" demez; sonuç, yorum, kampanya ya da kontenjan uydurmaz; kaybı telafi etmeye teşvik etmez; **hiçbir bahis sitesi önermez ya da adını vermez**; 18 yaş altına ya da kumar sorunu işareti gösterenlere satış yapmaz (YEDAM 115'e yönlendirir); "DUR" yazana bir daha yazmaz; link yazmaz. Kurallar `src/config/guard.ts` varsayılanlarıyla `src/sales/guardrails.ts` içinde uygulanır ve panel → Gelişmiş Ayarlar → Güvenlik filtresi bölümünden düzenlenebilir; koçun önerilerine de aynı filtre uygulanır.
 
 ## Yasal not
 

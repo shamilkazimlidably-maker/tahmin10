@@ -1,4 +1,5 @@
 import { SAFE, type SafeKey } from "@/src/config/safe";
+import { safeThemeCss } from "@/src/config/theme";
 
 /** "Futbol Veri Merkezi" — botlara ve izin verilen ülkeler dışından gelenlere gösterilen bilgi sayfası. Telegram düğmesi ve piksel yoktur. */
 export default function SafeLanding() {
@@ -11,6 +12,7 @@ export default function SafeLanding() {
   const email = S("contactEmail");
   return (
     <div className="sf">
+      <style dangerouslySetInnerHTML={{ __html: safeThemeCss() }} />
       <header className="sf__top">
         <span className="sf__brand">{S("brand")}</span>
         <nav className="sf__nav" aria-label="Bölümler">

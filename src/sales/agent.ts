@@ -2,7 +2,7 @@ import { z } from "zod";
 import { deepseekJson, type ChatMessage } from "../lib/deepseek";
 import type { Lead, Profile, StoredMessage } from "../lib/leads";
 import { FUNNEL, type Stage } from "../config/funnel";
-import { FOLLOWUP_PROMPT, STAGE_INSTRUCTIONS, salesAgentStaticPrompt } from "../config/prompts";
+import { PROMPT_TEXTS, STAGE_INSTRUCTIONS, salesAgentStaticPrompt } from "../config/prompts";
 import { renderPlaybook, type Playbook } from "../learning/playbook";
 import type { Assignment } from "../learning/experiments";
 import { TEXTS } from "../config/texts";
@@ -177,7 +177,7 @@ function buildMessages(input: AgentInput, correction?: string): ChatMessage[] {
       : "",
     renderProfile(input.profile),
     renderState(input.lead, input.stage, input.permissions),
-    input.followupMode ? FOLLOWUP_PROMPT : "",
+    input.followupMode ? PROMPT_TEXTS.followup : "",
     input.directive ? `# INSTRUÇÃO PARA ESTA MENSAGEM\n${input.directive}` : "",
     correction ? `# CORREÇÃO OBRIGATÓRIA\n${correction}` : "",
     "Responda somente com o objeto json.",

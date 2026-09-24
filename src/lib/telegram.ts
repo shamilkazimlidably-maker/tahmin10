@@ -1,3 +1,4 @@
+import { botCommandList } from "../config/commands";
 import { getEnv } from "./env";
 import { BUSINESS } from "../config/business";
 import { TEXTS } from "../config/texts";
@@ -145,15 +146,13 @@ export async function registerWebhook(): Promise<Record<string, unknown>> {
     drop_pending_updates: false,
     max_connections: 40,
   });
-  await tg("setMyCommands", {
-    commands: [
-      { command: "start", description: "Başla" },
-      { command: "planlar", description: "VIP planlarını gör" },
-      { command: "kanal", description: "Ücretsiz kanal" },
-      { command: "dur", description: "Mesaj almayı bırak" },
-    ],
-  }).catch(() => undefined);
+  await registerCommands().catch(() => undefined);
   return tg<Record<string, unknown>>("getWebhookInfo", {});
+}
+
+/** Botun "/" menüsündeki komut listesini panel ayarlarından yeniler. */
+export async function registerCommands(): Promise<void> {
+  await tg("setMyCommands", { commands: botCommandList() });
 }
 
 export async function getMe(): Promise<{ id: number; username?: string }> {

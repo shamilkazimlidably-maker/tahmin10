@@ -1,5 +1,5 @@
 import { BUSINESS, getPlan, supportContact } from "../config/business";
-import { DIRECT_BUYING_REGEX, DIRECT_BUYING_SIGNALS, FUNNEL, META_EVENTS } from "../config/funnel";
+import { DIRECT_BUYING_SIGNALS, FUNNEL, META_EVENTS } from "../config/funnel";
 import { notifyAdmin } from "../lib/admin";
 import {
   applySignals,
@@ -25,6 +25,7 @@ import { getActivePlaybook } from "../learning/playbook";
 import { permissionsFor, runSalesAgent, stageOf, type AgentOutput, type NextAction } from "./agent";
 import { TEXTS, tx } from "../config/texts";
 import { openTicket } from "./support";
+import { isDirectBuying } from "../config/commands";
 import { recordPostStart, singlePlanKeyboard, type PostRef } from "./posts";
 
 export type TelegramUser = { id: number; first_name?: string; username?: string; language_code?: string };
@@ -95,7 +96,7 @@ type TurnOptions = {
 function directBuyingIntent(output: AgentOutput, userText: string | undefined): boolean {
   if (!userText) return false;
   const fromModel = DIRECT_BUYING_SIGNALS.some((key) => Number(output.signals[key]?.value ?? 0) >= 0.5);
-  return fromModel || DIRECT_BUYING_REGEX.test(userText);
+  return fromModel || isDirectBuying(userText);
 }
 
 function resolveAction(output: AgentOutput, lead: Lead, userText: string | undefined): NextAction {

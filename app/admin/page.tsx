@@ -428,7 +428,7 @@ function Conversations({ initial }: { initial?: string | null }) {
 /* =====================================================================
  *  Ayar sekmeleri için ortak yardımcı
  * ===================================================================== */
-function useSection(section: "business" | "prompts" | "rules" | "texts" | "landing" | "safe" | "gate" | "integrations") {
+function useSection(section: "business" | "prompts" | "rules" | "texts" | "landing" | "safe" | "gate" | "integrations" | "prompts_full" | "guard" | "theme" | "commands") {
   const [s, setS] = useState<Any>(null);
   const [draft, setDraft] = useState<Any>(null);
   const [busy, run] = useBusy();
@@ -1048,13 +1048,14 @@ const TEXT_GROUPS: FlatGroup[] = [
 ];
 const LANDING_GROUPS: FlatGroup[] = [
   { title: "Üst bölüm (ilk ekran)", desc: "Reklamdan gelen kişinin kaydırmadan gördüğü yer. Başlık + düğme dönüşümün %80'idir. “İsteğe bağlı” yazanları boş bırakırsanız o satır sayfadan kalkar.", items: [["eyebrow", "Başlığın üstündeki küçük etiket (isteğe bağlı)"], ["headline1", "Başlık — 1. satır"], ["headlineHighlight", "Başlık — sarı satır (isteğe bağlı)"], ["headline2", "Başlık — son satır (isteğe bağlı)"], ["lead", "Başlığın altındaki tek cümle", "Kısa tutun: telefonda 2–3 satırı geçmesin.", 3], ["cta", "Ana düğme yazısı", "Alttaki yapışkan çubuktaki düğme de bunu kullanır."], ["trust1", "Güven işareti 1 (isteğe bağlı)"], ["trust2", "Güven işareti 2 (isteğe bağlı)"], ["trust3", "Güven işareti 3 (isteğe bağlı)"], ["micro", "Düğmenin altındaki küçük not (isteğe bağlı)", "", 2], ["fallbackHint", "“Telegram açılmadı mı?” yedek bağlantısı (isteğe bağlı)", "Instagram / Facebook içi tarayıcılar bazen Telegram'ı açmaz; düğmeye basıldıktan 2 saniye sonra bu bağlantı görünür."]] },
-  { title: "Örnek mesaj kartı", desc: "Telegram'a gelen mesajın BİÇİMİNİ gösterir (gri çizgilerle). Bilerek gerçek maç veya tahmin içermez.", items: [["previewTitle", "Kartın üstündeki başlık"], ["previewLabel", "Mesajın başlığı"], ["previewCaption", "Kartın altındaki açıklama (isteğe bağlı)", "", 2]] },
+  { title: "Örnek mesaj kartı", desc: "Telegram'a gelen mesajın BİÇİMİNİ gösterir (gri çizgilerle). Bilerek gerçek maç veya tahmin içermez.", items: [["previewTitle", "Kartın üstündeki başlık"], ["previewLabel", "Mesajın başlığı"], ["previewAvatar", "Avatar yazısı (1–3 karakter)"], ["previewSmall", "Kanal adının altındaki küçük yazı (isteğe bağlı)"], ["previewRow1", "1. satır etiketi"], ["previewRow2", "2. satır etiketi"], ["previewRow3", "3. satır etiketi"], ["previewTime", "Sağ alttaki küçük yazı (isteğe bağlı)"], ["previewCaption", "Kartın altındaki açıklama (isteğe bağlı)", "", 2]] },
+  { title: "Üst çubuk", items: [["brandMark", "Logo yazısı (boşsa marka adı; sondaki rakamlar sarı olur)"], ["ageBadge", "Yaş rozeti yazısı (boşsa +18)"]] },
   { title: "“Nasıl çalışır” ve “Ne alırsınız”", desc: "“Ne alırsınız” listesinin maddeleri İşletme Bilgileri → Ücretsiz kanal → “Kanalda neler paylaşılıyor?” bölümünden gelir.", items: [["howTitle", "“Nasıl çalışır” başlığı"], ["step1Title", "1. adım başlığı"], ["step1Text", "1. adım açıklaması", "", 2], ["step2Title", "2. adım başlığı"], ["step2Text", "2. adım açıklaması", "", 2], ["step3Title", "3. adım başlığı"], ["step3Text", "3. adım açıklaması", "", 2], ["benefitsTitle", "“Ne alırsınız” başlığı"]] },
   { title: "Sık sorulan sorular", desc: "İnsanların aklındaki şüpheyi sayfadan çıkmadan giderir. Bir sorunun sorusunu veya cevabını boş bırakırsanız o soru gizlenir.", items: [["faqTitle", "Bölüm başlığı"], ["faq1Q", "1. soru"], ["faq1A", "1. cevap", "", 3], ["faq2Q", "2. soru"], ["faq2A", "2. cevap", "", 3], ["faq3Q", "3. soru"], ["faq3A", "3. cevap", "", 3], ["faq4Q", "4. soru"], ["faq4A", "4. cevap", "", 3]] },
   { title: "Dürüstlük bölümü, son düğme ve alt bilgi", desc: "“Garanti yok” mesajı ve +18 uyarısı hem yasal koruma hem de Meta reklam onayı için önemlidir; yumuşatabilirsiniz ama kaldırmayın.", items: [["honestTitle", "Bölüm başlığı"], ["honestText", "Metin", "", 4], ["cta2", "Sayfa sonundaki düğme yazısı"], ["stickyText", "Alt yapışkan çubuktaki kısa yazı (isteğe bağlı)"], ["footer", "Alt bilgi (+18 uyarısı)", "", 4]] },
 ];
 
-function FlatSection({ section, title, intro, groups, after }: { section: "texts" | "landing" | "safe"; title: string; intro: ReactNode; groups: FlatGroup[]; after?: ReactNode }) {
+function FlatSection({ section, title, intro, groups, after }: { section: "texts" | "landing" | "safe" | "prompts_full" | "commands"; title: string; intro: ReactNode; groups: FlatGroup[]; after?: ReactNode }) {
   const { s, draft, upd, save, reset, busy, dirty } = useSection(section);
   if (!draft) return <p className="a-help">Yükleniyor…</p>;
   return (
@@ -1937,9 +1938,147 @@ function ButtonAdder({ plans, hasSupport, onAdd, onPreset }: { plans: Any[]; has
 }
 
 /* =====================================================================
+ *  GELİŞMİŞ AYARLAR  (tam prompt metni, güvenlik filtresi, tasarım, komutlar)
+ * ===================================================================== */
+const PTEXT_GROUPS: FlatGroup[] = [
+  { title: "Satış asistanı — sabit kısımlar", desc: "Bunlar Satış Asistanı sekmesindeki düzenlenebilir bloklardan SONRA prompta eklenir. Değişkenler: {{MARKA}}, {{YAS}}. Bir kuralı kaldırmak yasal/finansal risk yaratabilir; ne yaptığınızı biliyorsanız değiştirin, her zaman “Varsayılana dön” ile geri alabilirsiniz.", items: [["lockedRules", "Değişmez kurallar (dürüstlük, yaş, bahis sitesi, satışı kapatma…)", "Her satır bir kural. Botun uyduğu asıl metin budur.", 18], ["systemButtons", "Sistem düğmeleri açıklaması", "Botun invite_free / offer_vip / show_plans eylemlerinin ne yaptığı.", 6], ["knowledgeIntro", "Öğretilen bilgilerin başındaki talimat", "", 3]] },
+  { title: "Takip mesajı promptu", items: [["followup", "Takip modu talimatı", "“messages” kelimesi kalmalı.", 8]] },
+  { title: "Konuşma analisti (İngilizce talimat, Türkçe çıktı)", desc: "JSON alan adları (outcome, loss_reason, quality, summary…) korunmalı; yoksa sistem cevabı okuyamaz.", items: [["analyst", "Analist promptu", "", 24]] },
+  { title: "Satış koçu", desc: "JSON alan adları (playbook, guidelines, changes, experiment_proposals…) korunmalı.", items: [["coach", "Koç promptu", "", 30]] },
+  { title: "Diğer yapay zekâ görevleri", items: [["teach", "“Yapay zekâya öğret” — notu bilgi kaydına çeviren talimat", "“issue” ve “solution” kalmalı.", 6], ["analytics", "Analiz sekmesindeki yapay zekâ yorumu", "“ozet” ve “oneriler” kalmalı.", 22]] },
+];
+const CMD_GROUPS: FlatGroup[] = [
+  { title: "Bot komutları", desc: "Komut adı: yalnızca küçük harf, rakam ve _. Eski adlar (/planlar /kanal /dur /planos /canal /parar /stop /vip) her zaman çalışmaya devam eder. Kaydettikten sonra “Telegram menüsünü güncelle” düğmesine basın.", items: [["plans", "Planlar komutu (/ olmadan)"], ["plansDesc", "Açıklaması (Telegram menüsünde görünür)"], ["channel", "Ücretsiz kanal komutu"], ["channelDesc", "Açıklaması"], ["stop", "Mesajları durdurma komutu"], ["stopDesc", "Açıklaması"], ["startDesc", "/start açıklaması"]] },
+  { title: "“Satın almak istiyor” anahtar kelimeleri", desc: "Kişinin mesajında bunlardan biri geçerse bot her aşamada planları verebilir (satın almak isteyeni bekletmez). Virgülle ayırın; büyük/küçük harf önemsiz, Türkçe ekler tolere edilir.", items: [["directBuyingKeywords", "Anahtar kelimeler", "", 5]] },
+];
+const THEME_COLORS: [string, string][] = [["lpBg1", "Üst zemin"], ["lpBg2", "Alt zemin"], ["lpAccent", "Vurgu / düğme"], ["lpAccentDeep", "Düğme gölgesi"], ["lpText", "Yazı"], ["lpCtaText", "Düğme yazısı"]];
+const SAFE_COLORS: [string, string][] = [["sfHeader", "Üst çubuk ve başlıklar"], ["sfAccent", "Bağlantı / vurgu"], ["sfBg", "Zemin"], ["sfText", "Yazı"]];
+const THEME_SHOW: [string, string][] = [["showAgeBadge", "+18 rozeti"], ["showPreview", "Örnek mesaj kartı"], ["showHow", "“Nasıl çalışır?”"], ["showBenefits", "“Ne alırsın?” listesi"], ["showHonest", "“Açık konuşalım”"], ["showFaq", "Sık sorulan sorular"], ["showFinal", "Sayfa sonundaki düğme"], ["showSticky", "Alt yapışkan çubuk"], ["showFooter", "Alt bilgi (+18 uyarısı)"]];
+
+function ThemeEditor() {
+  const { s, draft: t, upd, save, reset, busy, dirty } = useSection("theme");
+  if (!t || !s) return <p className="a-help">Yükleniyor…</p>;
+  const color = (k: string, label: string) => (
+    <div key={k} style={{ width: 170 }}><Field label={label}><div className="a-row" style={{ gap: 6 }}><input type="color" value={/^#[0-9a-f]{6}$/i.test(t[k]) ? t[k] : "#000000"} onChange={(e) => upd([k], e.target.value)} style={{ width: 44, height: 36, padding: 2 }} /><input value={t[k]} onChange={(e) => upd([k], e.target.value)} style={{ width: 100 }} /></div></Field></div>
+  );
+  const check = (k: string, label: string) => <label key={k} className="a-row" style={{ gap: 6, fontSize: 14 }}><input type="checkbox" style={{ width: 18 }} checked={Boolean(t[k])} onChange={(e) => upd([k], e.target.checked)} /> {label}</label>;
+  return (
+    <>
+      <p className="a-intro">Açılış sayfasının ve Futbol Veri Merkezi sayfasının görünümü. Renkler, yazı tipi, köşe yuvarlaklığı, hangi bölümlerin görüneceği ve isterseniz serbest CSS. Metinler Açılış Sayfası / Veri Merkezi Sayfası sekmelerinde. Kaydettikten sonra <a href="/?goruntule=ana" target="_blank" rel="noreferrer">ana sayfayı</a> ve <a href="/?goruntule=veri" target="_blank" rel="noreferrer">Veri Merkezi sayfasını</a> yeni sekmede açıp bakın.</p>
+      <Card title="Açılış sayfası — renkler" desc="#rrggbb biçiminde. Sarı düğme + koyu yeşil zemin varsayılandır.">
+        <div className="a-row">{THEME_COLORS.map(([k, l]) => color(k, l))}<div style={{ width: 170 }}><Field label="İkincil yazı saydamlığı (%)"><Num value={t.lpMutedOpacity} min={20} max={100} onChange={(v) => upd(["lpMutedOpacity"], v)} /></Field></div></div>
+      </Card>
+      <Card title="Açılış sayfası — yazı tipi ve düzen">
+        <div className="a-row" style={{ alignItems: "flex-end" }}>
+          <div style={{ width: 200 }}><Field label="Başlık yazı tipi"><select value={t.lpFontDisplay} onChange={(e) => upd(["lpFontDisplay"], e.target.value)}><option value="condensed">Dar (kondense)</option><option value="system">Sistem</option><option value="serif">Serif</option><option value="rounded">Yuvarlak</option><option value="mono">Sabit genişlik</option></select></Field></div>
+          <div style={{ width: 200 }}><Field label="Metin yazı tipi"><select value={t.lpFontBody} onChange={(e) => upd(["lpFontBody"], e.target.value)}><option value="system">Sistem</option><option value="serif">Serif</option><option value="rounded">Yuvarlak</option><option value="mono">Sabit genişlik</option></select></Field></div>
+          <div style={{ width: 160 }}><Field label="Köşe yuvarlaklığı (px)"><Num value={t.lpRadius} min={0} max={40} onChange={(v) => upd(["lpRadius"], v)} /></Field></div>
+          <div style={{ width: 240 }}><Field label="Geniş ekranda örnek mesaj"><select value={t.lpHeroLayout} onChange={(e) => upd(["lpHeroLayout"], e.target.value)}><option value="side">Başlığın yanında</option><option value="stack">Başlığın altında, ortalı</option></select></Field></div>
+        </div>
+        <div className="a-row" style={{ gap: 16 }}>{check("lpStripes", "Çim çizgileri")}{check("lpCtaUppercase", "Düğme yazısı BÜYÜK HARF")}</div>
+      </Card>
+      <Card title="Açılış sayfası — bölümler" desc="Kapattığınız bölüm sayfadan tamamen kalkar.">
+        <div className="a-row" style={{ gap: 16 }}>{THEME_SHOW.map(([k, l]) => check(k, l))}</div>
+      </Card>
+      <Card title="Açılış sayfası — serbest CSS" desc="Bilenler için: sayfanın sonuna eklenir ve her şeyi ezer. Sınıf adları: .page .top .brand .hero .chip .lead .cta .trust .tg .tg__phone .steps .gets .honest .faq .final .foot .sticky. Boş bırakılabilir.">
+        <Txt value={t.lpCustomCss} onChange={(v) => upd(["lpCustomCss"], v)} rows={8} placeholder={".cta { background: #ff3b30; }\n.hero h1 { letter-spacing: 0; }"} />
+      </Card>
+      <Card title="Futbol Veri Merkezi sayfası" desc="Botlara ve ülke dışına gösterilen bilgi sayfasının görünümü.">
+        <div className="a-row">{SAFE_COLORS.map(([k, l]) => color(k, l))}</div>
+        <Field label="Serbest CSS (sınıflar: .sf .sf__top .sf__brand .sf__nav .sf__hero .sf__cards .sf__section .sf__foot)"><Txt value={t.sfCustomCss} onChange={(v) => upd(["sfCustomCss"], v)} rows={5} /></Field>
+      </Card>
+      <SaveBar onSave={save} onReset={reset} busy={busy} dirty={dirty} />
+    </>
+  );
+}
+
+function GuardEditor() {
+  const { s, draft: g, upd, save, reset, busy, dirty } = useSection("guard");
+  const [test, setTest] = useState("Bu hafta banko kupon var, garanti yok ama %90 isabet.");
+  const [result, setResult] = useState<Any>(null);
+  const [nr, setNr] = useState<{ label: string; kind: "word" | "regex"; value: string; id: string }>({ label: "", kind: "word", value: "", id: "custom" });
+  const [tb, run] = useBusy();
+  if (!g || !s) return <p className="a-help">Yükleniyor…</p>;
+  const rules: Any[] = g.rules ?? [];
+  const setRule = (i: number, patch: Any) => upd(["rules"], rules.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const lists: [string, string, string][] = [
+    ["negationAfter", "Eşleşmeden SONRA gelirse dürüst sayılan kelimeler", "“garanti yok”, “garanti etmiyoruz” gibi cümleleri serbest bırakır."],
+    ["negationWeak", "“yok” içeren kalıplar için dar liste", "“risk yok” kalıbında “yok” iddianın kendisidir; bu liste onun yerine kullanılır."],
+    ["negationBefore", "Eşleşmeden ÖNCE gelirse dürüst sayılan kelimeler", "“hiçbir tahmin garanti değildir”, “kimse garanti veremez”."],
+    ["optOutWhole", "Tek kelimelik “mesaj istemiyorum” mesajları", "Kişi yalnızca bunlardan birini yazarsa bot bir daha yazmaz."],
+    ["optOutPhrases", "Mesajın içinde geçen “mesaj istemiyorum” kalıpları (düzenli ifade parçaları)", "Virgülle ayrılır; her parça bir regex'tir."],
+    ["resultWords", "Sonuç kelimeleri", "Bir yüzde bunların yanındaysa “isabet iddiası” sayılır ve yalnızca İşletme Bilgileri'ndeki gerçek sayılara izin verilir."],
+    ["promoWords", "Kampanya kelimeleri", "Aktif kampanya tanımlı değilken bunlar geçerse “uydurma kampanya” sayılır."],
+  ];
+  return (
+    <>
+      <p className="a-intro">Botun ve koçun asla yazamayacağı ifadeler. Her kuralı kapatabilir, silebilir, kendi kelimenizi ekleyebilirsiniz. Kural “kelime” türündeyse Türkçe ekler de yakalanır (“garanti” → garantili, garantisi…). Cümlede olumsuzluk varsa (“garanti yok”) izin verilir; olumsuzluk kelimelerini de siz yönetirsiniz. Değişiklik hemen geçerli olur; yasak ifade üreten cevap yeniden yazdırılır, olmazsa güvenli cevap gider.</p>
+      <div className="a-warn">Filtreyi gevşetmek yasal risk demektir: “banko”, “garanti”, “kesin kazanç” gibi ifadeler yanıltıcı reklamdır ve Meta reklam hesabınızı kapattırabilir. Her zaman “Varsayılana dön” ile başlangıç listesine dönebilirsiniz.</div>
+      <Card title="Genel" right={<label className="a-row" style={{ gap: 6 }}><input type="checkbox" style={{ width: 18 }} checked={Boolean(g.enabled)} onChange={(e) => upd(["enabled"], e.target.checked)} /> Filtre açık</label>}>
+        <div className="a-row" style={{ gap: 16 }}>
+          <label className="a-row" style={{ gap: 6, fontSize: 14 }}><input type="checkbox" style={{ width: 18 }} checked={Boolean(g.checkStats)} onChange={(e) => upd(["checkStats"], e.target.checked)} /> Doğrulanmamış isabet/kazanç yüzdelerini engelle</label>
+          <label className="a-row" style={{ gap: 6, fontSize: 14 }}><input type="checkbox" style={{ width: 18 }} checked={Boolean(g.checkLinks)} onChange={(e) => upd(["checkLinks"], e.target.checked)} /> Botun mesajında çıplak link yasak (düğmeleri sistem ekler)</label>
+        </div>
+      </Card>
+      <Card title={`Yasak ifadeler (${rules.length})`} desc="“Kategori” aynı olan kurallar aynı sebep adıyla raporlanır (guaranteed_result, fake_scarcity…). “yok”lu kalıp: kalıbın kendisinde “yok” geçiyorsa işaretleyin.">
+        <div className="a-scroll"><table className="a-table" style={{ minWidth: 820 }}><thead><tr><th>Açık</th><th>Ad</th><th>Tür</th><th>Kelime / düzenli ifade</th><th>Kategori</th><th>“yok”lu kalıp</th><th /></tr></thead><tbody>
+          {rules.map((r, i) => (
+            <tr key={i}>
+              <td><input type="checkbox" style={{ width: 18 }} checked={Boolean(r.enabled)} onChange={(e) => setRule(i, { enabled: e.target.checked })} /></td>
+              <td><input value={r.label} onChange={(e) => setRule(i, { label: e.target.value })} style={{ width: 170 }} /></td>
+              <td><select value={r.kind} onChange={(e) => setRule(i, { kind: e.target.value })}><option value="word">kelime</option><option value="regex">regex</option></select></td>
+              <td><input value={r.value} onChange={(e) => setRule(i, { value: e.target.value })} style={{ width: 340, fontFamily: "ui-monospace, monospace", fontSize: 12 }} /></td>
+              <td><input value={r.id} onChange={(e) => setRule(i, { id: e.target.value })} style={{ width: 150 }} /></td>
+              <td><input type="checkbox" style={{ width: 18 }} checked={Boolean(r.weakNegation)} onChange={(e) => setRule(i, { weakNegation: e.target.checked })} /></td>
+              <td><Btn small kind="danger" onClick={() => upd(["rules"], rules.filter((_, j) => j !== i))}>Sil</Btn></td>
+            </tr>
+          ))}
+        </tbody></table></div>
+        <div className="a-row" style={{ alignItems: "flex-end", marginTop: 10 }}>
+          <div style={{ width: 170 }}><Field label="Yeni kural adı"><input value={nr.label} onChange={(e) => setNr({ ...nr, label: e.target.value })} placeholder="ör. Şike" /></Field></div>
+          <div style={{ width: 120 }}><Field label="Tür"><select value={nr.kind} onChange={(e) => setNr({ ...nr, kind: e.target.value as "word" | "regex" })}><option value="word">kelime</option><option value="regex">regex</option></select></Field></div>
+          <div style={{ width: 300 }}><Field label="Kelime / ifade"><input value={nr.value} onChange={(e) => setNr({ ...nr, value: e.target.value })} placeholder={nr.kind === "word" ? "ör. şike" : "ör. (?<![a-zçğıöşü])şike"} /></Field></div>
+          <div style={{ width: 170 }}><Field label="Kategori"><input value={nr.id} onChange={(e) => setNr({ ...nr, id: e.target.value })} /></Field></div>
+          <div className="a-field"><Btn small onClick={() => { if (!nr.value.trim()) return; upd(["rules"], [...rules, { id: nr.id || "custom", label: nr.label || nr.value, kind: nr.kind, value: nr.value.trim(), enabled: true, weakNegation: false }]); setNr({ ...nr, label: "", value: "" }); }}>Kural ekle</Btn></div>
+        </div>
+      </Card>
+      {lists.map(([k, label, help]) => <Card key={k} title={label} desc={help}><Txt value={g[k] ?? ""} onChange={(v) => upd([k], v)} rows={k === "optOutPhrases" ? 4 : 3} /></Card>)}
+      <Card title="Test et" desc="Bir cümle yazın; kaydedilmemiş değişiklikler teste yansımaz (önce kaydedin).">
+        <Txt value={test} onChange={setTest} rows={2} />
+        <div className="a-row" style={{ marginTop: 8 }}><Btn small onClick={() => run("t", async () => setResult(await api("guard_test", { text: test })))} busy={tb === "t"}>Kontrol et</Btn></div>
+        {result && (
+          <div style={{ marginTop: 10, fontSize: 14 }}>
+            {result.explain.length ? result.explain.map((x: Any, i: number) => <p key={i}>🚫 <b>{x.label}</b> ({x.rule}) — “{x.match}”</p>) : <p>✅ Yasak ifade yok.</p>}
+            <p className="a-help">Mesaj istemiyor: {result.optOut ? "EVET" : "hayır"} · Satın alma sorusu: {result.directBuying ? "EVET" : "hayır"}</p>
+          </div>
+        )}
+      </Card>
+      <SaveBar onSave={save} onReset={reset} busy={busy} dirty={dirty} />
+    </>
+  );
+}
+
+function Advanced() {
+  const [sub, setSub] = useState<"prompt" | "guard" | "theme" | "commands">("prompt");
+  const [cb, run] = useBusy();
+  const tabs: [typeof sub, string][] = [["prompt", "🧠 Prompt (tam metin)"], ["guard", "🛡️ Güvenlik filtresi"], ["theme", "🎨 Tasarım"], ["commands", "⌨️ Komutlar ve anahtar kelimeler"]];
+  return (
+    <>
+      <h1>Gelişmiş Ayarlar</h1>
+      <p className="a-intro">Buradaki her şey daha önce yalnızca kodda değiştirilebiliyordu. Sayısal kurallar (puanlar, takip süreleri, saklama) Kurallar ve Puanlama sekmesinde; bloklar Satış Asistanı'nda; metinler Hazır Mesajlar / Açılış Sayfası'nda. Her bölümde “Varsayılana dön” vardır.</p>
+      <div className="a-row" style={{ marginBottom: 14 }}>{tabs.map(([k, l]) => <Btn key={k} small kind={sub === k ? undefined : "soft"} onClick={() => setSub(k)}>{l}</Btn>)}</div>
+      {sub === "prompt" && <FlatSection section="prompts_full" title="Prompt (tam metin)" groups={PTEXT_GROUPS} intro={<>Satış asistanının değişmez kuralları ve tüm yapay zekâ görevlerinin talimatları. Kaydedince 20 saniye içinde geçerli olur. Tam birleştirilmiş prompt Satış Asistanı sekmesinin altında görünür.</>} />}
+      {sub === "guard" && <GuardEditor />}
+      {sub === "theme" && <ThemeEditor />}
+      {sub === "commands" && <FlatSection section="commands" title="Komutlar ve anahtar kelimeler" groups={CMD_GROUPS} intro={<>Bot komutlarının adları, Telegram menüsündeki açıklamaları ve “satın almak istiyor” anahtar kelimeleri.</>} after={<div className="a-row" style={{ marginTop: 10 }}><Btn small kind="soft" onClick={() => run("sync", async () => { await api("commands_sync"); }, "Telegram menüsü güncellendi.")} busy={cb === "sync"}>Telegram menüsünü güncelle</Btn><span className="a-help">Kaydettikten sonra basın; botun “/” menüsündeki komut listesi yenilenir.</span></div>} />}
+    </>
+  );
+}
+
+/* =====================================================================
  *  Kabuk: giriş + menü
  * ===================================================================== */
-const TABS: [string, string][] = [["ozet", "📊 Genel Bakış"], ["analiz", "📈 Analiz"], ["konusmalar", "💬 Konuşmalar"], ["destek", "🆘 Destek Talepleri"], ["paylasim", "📣 Kanal Paylaşımları"], ["isletme", "🏷️ İşletme Bilgileri"], ["asistan", "🤖 Satış Asistanı"], ["mesajlar", "✉️ Hazır Mesajlar"], ["kurallar", "⚖️ Kurallar ve Puanlama"], ["ogrenme", "🧠 Öğrenme"], ["sayfa", "🌐 Açılış Sayfası"], ["filtre", "🛡️ Ziyaretçi Filtresi"], ["verimerkezi", "🧾 Veri Merkezi Sayfası"], ["entegrasyon", "🔌 Entegrasyonlar"], ["kitleler", "🎯 Hedef Kitleler"], ["odemeler", "💳 Ödemeler"], ["veri", "🗑️ Veri Yönetimi"], ["sistem", "🛠️ Sistem"]];
+const TABS: [string, string][] = [["ozet", "📊 Genel Bakış"], ["analiz", "📈 Analiz"], ["konusmalar", "💬 Konuşmalar"], ["destek", "🆘 Destek Talepleri"], ["paylasim", "📣 Kanal Paylaşımları"], ["isletme", "🏷️ İşletme Bilgileri"], ["asistan", "🤖 Satış Asistanı"], ["mesajlar", "✉️ Hazır Mesajlar"], ["kurallar", "⚖️ Kurallar ve Puanlama"], ["ogrenme", "🧠 Öğrenme"], ["sayfa", "🌐 Açılış Sayfası"], ["filtre", "🛡️ Ziyaretçi Filtresi"], ["verimerkezi", "🧾 Veri Merkezi Sayfası"], ["entegrasyon", "🔌 Entegrasyonlar"], ["kitleler", "🎯 Hedef Kitleler"], ["gelismis", "🧰 Gelişmiş Ayarlar"], ["odemeler", "💳 Ödemeler"], ["veri", "🗑️ Veri Yönetimi"], ["sistem", "🛠️ Sistem"]];
 
 export default function AdminPage() {
   const [auth, setAuth] = useState<"checking" | "in" | "out">("checking");
@@ -1998,6 +2137,7 @@ export default function AdminPage() {
               {tab === "kitleler" && <Audiences />}
               {tab === "filtre" && <VisitorFilter />}
               {tab === "paylasim" && <ChannelPosts />}
+              {tab === "gelismis" && <Advanced />}
               {tab === "verimerkezi" && <FlatSection section="safe" title="Veri Merkezi Sayfası" groups={SAFE_GROUPS} intro={<>Botlara, tarayıcı robotlarına ve izin verilen ülkeler dışından gelenlere gösterilen “Futbol Veri Merkezi” sayfasının bütün yazıları (kime gösterileceği: Ziyaretçi Filtresi sekmesi). Bu sayfada Telegram düğmesi, fiyat ya da tahmin yoktur; öyle kalması önerilir. Kaydettikten sonra en geç 20 saniye içinde yayına girer. Önizleme: Ziyaretçi Filtresi → Önizleme.</>} />}
               {tab === "veri" && <DataAdmin />}
               {tab === "isletme" && <Business />}

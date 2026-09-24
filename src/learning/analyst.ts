@@ -2,7 +2,7 @@ import { z } from "zod";
 import { deepseekJson } from "../lib/deepseek";
 import { db, must } from "../lib/supabase";
 import { getAllMessages, mergeProfile, type Lead } from "../lib/leads";
-import { ANALYST_PROMPT, LOSS_REASONS, SEGMENTS } from "../config/prompts";
+import { LOSS_REASONS, PROMPT_TEXTS, SEGMENTS } from "../config/prompts";
 
 const score = z.coerce.number().min(0).max(10).catch(5);
 const list = z
@@ -80,7 +80,7 @@ export async function analyzeLead(lead: Lead): Promise<Analysis | null> {
 
   const { json } = await deepseekJson({
     messages: [
-      { role: "system", content: ANALYST_PROMPT },
+      { role: "system", content: PROMPT_TEXTS.analyst },
       { role: "user", content: `SYSTEM FACTS:\n${JSON.stringify(facts, null, 2)}\n\nTRANSCRIPT:\n${transcript.slice(-24_000)}` },
     ],
     temperature: 0.2,
