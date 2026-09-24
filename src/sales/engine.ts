@@ -26,6 +26,7 @@ import { permissionsFor, runSalesAgent, stageOf, type AgentOutput, type NextActi
 import { TEXTS, tx } from "../config/texts";
 import { openTicket } from "./support";
 import { isDirectBuying } from "../config/commands";
+import { INBOX } from "../config/inbox";
 import { getEnv } from "../lib/env";
 import { recordPostStart, singlePlanKeyboard, type PostRef } from "./posts";
 
@@ -389,6 +390,10 @@ export async function handleFreeChannelJoined(lead: Lead, via: "button" | "auto"
   await sendMetaEvent({ ...META_EVENTS.freeJoined, eventId: `registration_${lead.id}`, lead, contentName: "free_channel", customData: { status: true } });
 
   if (!lead.chat_id || lead.blocked || lead.opted_out || options.silent) return;
+  if (INBOX.mode === "human") {
+    if (INBOX.joinedMessage.trim()) await sendToLead(lead, INBOX.joinedMessage.trim());
+    return;
+  }
   await runTurn(lead.id, {
     directive:
       "Sistem kişinin ücretsiz kanala girdiğini doğruladı. Sıcak ve kısa bir hoş geldin de (1 satır), kanalda ne bulacağını tek cümleyle söyle (yalnızca BİLGİLER'de olanı) ve sohbeti başlatmak için futbolla ilgili tek bir soru sor (tuttuğu takım ya da bu hafta takip ettiği maç). VIP'ten henüz söz etme; satış, kişi cevap vermeye başlayınca doğal olarak gelir.",

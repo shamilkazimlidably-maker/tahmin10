@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { LEARNING, type ExperimentMetric } from "@/src/config/funnel";
 import { analyticsAiHistory, getAnalytics, runAnalyticsAi, saveSpend, spDate } from "@/src/lib/analytics";
 import { purgeVisits, visitorStats } from "@/src/lib/visits";
+import { cannedDelete, cannedList, cannedSave, cannedUsed, checkMembership, coachHistory, getConversation, humanCoach, listConversations, markRead, rewriteText, sendAgentReply, suggestReply, tagDelete, tagSave, tagsList, todoList, updateMeta } from "@/src/sales/inbox";
 import { explainClaims, findForbiddenClaims, isOptOut } from "@/src/sales/guardrails";
 import { isDirectBuying } from "@/src/config/commands";
 import { deleteFromChannel, deletePostRow, deleteTemplate, duplicatePost, editInChannel, pinInChannel, PostError, postsOverview, runDuePosts, savePost, saveTemplate, sendPost, stopPoll, uploadMedia, validatePost } from "@/src/sales/posts";
@@ -39,7 +40,7 @@ const WEEK = 7 * 24 * 3600;
 const password = (env: Env) => process.env.ADMIN_PASSWORD?.trim() || env.SETUP_SECRET;
 const sign = (exp: number, env: Env) => crypto.createHmac("sha256", `${env.SETUP_SECRET}|${password(env)}|admin`).update(String(exp)).digest("base64url");
 
-function isAuthed(request: NextRequest, env: Env): boolean {
+export function isAuthed(request: NextRequest, env: Env): boolean {
   const [exp, sig] = (request.cookies.get(COOKIE)?.value ?? "").split(".");
   if (!exp || !sig || Number(exp) < Date.now()) return false;
   return safeEqual(sig, sign(Number(exp), env));
@@ -296,6 +297,52 @@ async function handle(action: string, body: any): Promise<unknown> {
       const t = String(body.text ?? "").slice(0, 2000);
       return { claims: findForbiddenClaims(t), explain: explainClaims(t), optOut: isOptOut(t), directBuying: isDirectBuying(t) };
     }
+
+    /* ---------------- inbox (insan operatör modu) ---------------- */
+    case "inbox_list": {
+      const [rows, tags, canned] = await Promise.all([listConversations({ box: String(body.box ?? "open"), tag: body.tag ? String(body.tag) : undefined, q: body.q ? String(body.q).slice(0, 60) : undefined }), tagsList(), cannedList()]);
+      return { rows, tags, canned };
+    }
+    case "inbox_get": {
+      const conv = await getConversation(String(body.lead_id));
+      if (body.mark_read !== false) await markRead(String(body.lead_id));
+      return conv;
+    }
+    case "inbox_send": {
+      await sendAgentReply(String(body.lead_id), String(body.text ?? ""), { action: body.action === "invite" || body.action === "plans" ? body.action : null, allowClaims: Boolean(body.allowClaims) });
+      if (body.canned_id) await cannedUsed(Number(body.canned_id)).catch(() => undefined);
+      return { ok: true };
+    }
+    case "inbox_read":
+      await markRead(String(body.lead_id));
+      return { ok: true };
+    case "inbox_meta":
+      await updateMeta(String(body.lead_id), body.patch as { tags?: string[]; starred?: boolean; inbox_status?: "open" | "closed"; note?: string | null });
+      return { ok: true };
+    case "inbox_check":
+      return checkMembership(String(body.lead_id));
+    case "inbox_suggest":
+      return suggestReply(String(body.lead_id), body.hint ? String(body.hint) : undefined);
+    case "inbox_rewrite":
+      return { text: await rewriteText(String(body.text ?? ""), (["samimi", "kisa", "resmi", "ikna"] as const).find((s) => s === body.style) ?? "samimi") };
+    case "inbox_todo":
+      return todoList();
+    case "inbox_coach":
+      return { entry: await humanCoach(), history: await coachHistory() };
+    case "inbox_coach_history":
+      return { history: await coachHistory() };
+    case "canned_save":
+      await cannedSave(body as { id?: number; title: string; shortcut?: string | null; text: string; action?: string | null; category?: string });
+      return { canned: await cannedList() };
+    case "canned_delete":
+      await cannedDelete(Number(body.id));
+      return { canned: await cannedList() };
+    case "tag_save":
+      await tagSave(body as { id?: number; name: string; color?: string });
+      return { tags: await tagsList() };
+    case "tag_delete":
+      await tagDelete(Number(body.id));
+      return { tags: await tagsList() };
 
     /* ---------------- channel posts ---------------- */
     case "posts_overview":

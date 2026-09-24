@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { BUSINESS } from "@/src/config/business";
 import { parsePostRef } from "@/src/sales/posts";
 import { COMMANDS } from "@/src/config/commands";
+import { extractSignals, isHumanMode, recordInbound, type InboundMedia } from "@/src/sales/inbox";
 import { getEnv } from "@/src/lib/env";
 import { db } from "@/src/lib/supabase";
 import { isAdminChat, notifyAdmin } from "@/src/lib/admin";
@@ -23,7 +24,7 @@ export const maxDuration = 60;
 type Chat = { id: number; type: string; username?: string };
 type Message = {
   message_id: number; from?: TelegramUser & { is_bot?: boolean }; chat: Chat; text?: string; caption?: string;
-  photo?: unknown[]; document?: { mime_type?: string }; voice?: unknown; audio?: unknown; video_note?: unknown;
+  photo?: { file_id: string; file_size?: number }[]; document?: { file_id?: string; mime_type?: string; file_name?: string }; voice?: { file_id?: string }; audio?: { file_id?: string; file_name?: string }; video_note?: { file_id?: string }; video?: { file_id?: string; file_name?: string }; sticker?: { file_id?: string; emoji?: string };
   reply_to_message?: { message_id: number };
 };
 type MemberUpdate = { chat: Chat; from: TelegramUser; old_chat_member: ChatMember; new_chat_member: ChatMember & { user: TelegramUser & { is_bot?: boolean } } };
@@ -113,6 +114,22 @@ async function onMessage(m: Message, replied: () => Promise<void>): Promise<void
   if (isAdminChat(m.chat.id) && m.reply_to_message && (await handleAdminReply(m))) return replied();
 
   const text = m.text?.trim();
+  if (!text && isHumanMode() && !isAdminChat(m.chat.id)) {
+    // İnsan operatör modu: ses, fotoğraf, video, dosya panele düşer.
+    const media: InboundMedia | null =
+      m.photo?.length ? { kind: "photo", fileId: m.photo[m.photo.length - 1]!.file_id, caption: m.caption } :
+      m.voice?.file_id ? { kind: "voice", fileId: m.voice.file_id } :
+      m.audio?.file_id ? { kind: "audio", fileId: m.audio.file_id, name: m.audio.file_name } :
+      m.video_note?.file_id ? { kind: "video_note", fileId: m.video_note.file_id } :
+      m.video?.file_id ? { kind: "video", fileId: m.video.file_id, name: m.video.file_name, caption: m.caption } :
+      m.document?.file_id ? { kind: "document", fileId: m.document.file_id, name: m.document.file_name ?? m.document.mime_type, caption: m.caption } :
+      m.sticker?.file_id ? { kind: "sticker", fileId: m.sticker.file_id, name: m.sticker.emoji } : null;
+    if (!media) return replied();
+    const lead = await getLeadByTelegramId(from.id);
+    if (!lead) return handleStart(from, m.chat.id, null, replied);
+    await recordInbound(lead, { media, telegramMessageId: m.message_id });
+    return replied();
+  }
   if (!text) {
     const isAudio = Boolean(m.voice || m.audio || m.video_note);
     const isImage = Boolean(m.photo?.length || m.document?.mime_type?.startsWith("image/"));
@@ -164,6 +181,13 @@ async function onMessage(m: Message, replied: () => Promise<void>): Promise<void
     } else if (command) {
       await sendToLead(lead, tx("help"), { store: false });
     } else {
+      if (isHumanMode()) {
+        // İnsan operatör modu: mesaj panele düşer; yapay zekâ yalnızca sinyal/puan çıkarır, cevap yazmaz.
+        const stored = await recordInbound(lead, { text, telegramMessageId: m.message_id });
+        await replied();
+        if (stored) await extractSignals((await getLeadById(lead.id)) ?? lead, text);
+        return;
+      }
       // A human is handling this person (screenshot / asked for a human): pass the text on, keep the AI quiet.
       if (lead.needs_human && (await routeToOpenTicket(lead, text, m.message_id))) {
         await replied();

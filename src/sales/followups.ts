@@ -1,3 +1,4 @@
+import { INBOX } from "../config/inbox";
 import { FOLLOWUPS, FOLLOWUP_RULES, FUNNEL, type FollowupRule } from "../config/funnel";
 import { db, must } from "../lib/supabase";
 import { getProfile, getRecentMessages, recordEvent, updateLead, type Lead } from "../lib/leads";
@@ -70,6 +71,7 @@ async function writeFollowup(lead: Lead, rule: FollowupRule): Promise<string> {
 export type FollowupRunResult = { skipped?: string; candidates: number; sent: number; blocked: number; errors: number };
 
 export async function runFollowups(options: { force?: boolean } = {}): Promise<FollowupRunResult> {
+  if (INBOX.mode === "human") return { skipped: "human_mode", candidates: 0, sent: 0, blocked: 0, errors: 0 }; // insan modu: takip mesajlarını operatör yazar
   const hour = localHour(FOLLOWUPS.timezone);
   if (!options.force && (hour < FOLLOWUPS.sendFromHour || hour >= FOLLOWUPS.sendUntilHour)) {
     return { skipped: `quiet hours (${hour}h in ${FOLLOWUPS.timezone})`, candidates: 0, sent: 0, blocked: 0, errors: 0 };

@@ -7,6 +7,7 @@ import { GATE, type GateSettings } from "../config/gate";
 import { GUARD, type GuardRule, type GuardSettings } from "../config/guard";
 import { THEME, isHex, type ThemeSettings } from "../config/theme";
 import { COMMANDS, type CommandSettings } from "../config/commands";
+import { INBOX, type InboxSettings } from "../config/inbox";
 import { TEXTS } from "../config/texts";
 import { INTEGRATION_OVERRIDES } from "./integrations";
 import { lockedPromptPart, PROMPT_BLOCKS, PROMPT_TEXTS, salesAgentStaticPrompt, STAGE_INSTRUCTIONS, SUPPORT_KB, type KnowledgeEntry, type PromptBlockKey } from "../config/prompts";
@@ -148,6 +149,7 @@ const D_PTEXTS = { ...PROMPT_TEXTS } as Dict<string>;
 const D_GUARD: GuardSettings = JSON.parse(JSON.stringify(GUARD));
 const D_THEME: ThemeSettings = { ...THEME };
 const D_COMMANDS = { ...COMMANDS } as Dict<string>;
+const D_INBOX: InboxSettings = { ...INBOX };
 
 export type StoredIntegrations = {
   metaPixelId?: string; metaAccessToken?: string; metaTestEventCode?: string; supportUsername?: string;
@@ -164,6 +166,7 @@ export type StoredSettings = {
   guard?: Partial<GuardSettings>;
   theme?: Partial<ThemeSettings>;
   commands?: Dict<string>;
+  inbox?: Partial<InboxSettings>;
   integrations?: StoredIntegrations;
   business?: unknown;
   prompts?: { blocks?: Dict<string>; stages?: Dict<string> };
@@ -204,6 +207,7 @@ function applyStored(s: StoredSettings): void {
   Object.assign(GUARD, cleanGuard(s.guard ?? {}));
   Object.assign(THEME, cleanTheme(s.theme ?? {}));
   for (const k of Object.keys(D_COMMANDS)) (COMMANDS as Dict<string>)[k] = text(s.commands?.[k], 2000) ?? D_COMMANDS[k]!;
+  Object.assign(INBOX, cleanInbox(s.inbox ?? {}));
 
   const it = s.integrations ?? {};
   const o = INTEGRATION_OVERRIDES;
@@ -325,6 +329,16 @@ function cleanGuard(v: Partial<GuardSettings>, strict = false): GuardSettings {
   };
 }
 
+function cleanInbox(v: Partial<InboxSettings>): InboxSettings {
+  return {
+    mode: v.mode === "ai" ? "ai" : "human",
+    notifyTelegram: bool(v.notifyTelegram, D_INBOX.notifyTelegram),
+    notifyCooldownMinutes: Math.max(0, Math.min(1440, Math.round(Number(v.notifyCooldownMinutes ?? D_INBOX.notifyCooldownMinutes)) || 0)),
+    joinedMessage: typeof v.joinedMessage === "string" ? v.joinedMessage.trim().slice(0, 1000) : D_INBOX.joinedMessage,
+    agentName: typeof v.agentName === "string" ? v.agentName.trim().slice(0, 60) : D_INBOX.agentName,
+  };
+}
+
 /** Tasarım ayarlarını temizler. */
 function cleanTheme(v: Partial<ThemeSettings>, strict = false): ThemeSettings {
   const problems: string[] = [];
@@ -393,6 +407,7 @@ export function validateSection(section: SettingsSection, value: unknown): unkno
   if (section === "gate") return cleanGate((value ?? {}) as Partial<GateSettings>, true);
   if (section === "guard") return cleanGuard((value ?? {}) as Partial<GuardSettings>, true);
   if (section === "theme") return cleanTheme((value ?? {}) as Partial<ThemeSettings>, true);
+  if (section === "inbox") return cleanInbox((value ?? {}) as Partial<InboxSettings>);
   if (section === "prompts_full") {
     const v = (value ?? {}) as Dict<unknown>;
     const out: Dict<string> = {};
@@ -523,7 +538,7 @@ export function settingsView() {
   };
   return {
     ...live,
-    defaults: { texts: D_TEXTS, landing: D_LANDING, safe: D_SAFE, gate: D_GATE, prompts_full: D_PTEXTS, guard: D_GUARD, theme: D_THEME, commands: D_COMMANDS, business: D.business, prompts: { blocks: D.blocks, stages: D.stages }, rules: { ...D.rules, weights: D.weights, followupRules: D.followupRules } },
+    defaults: { texts: D_TEXTS, landing: D_LANDING, safe: D_SAFE, gate: D_GATE, prompts_full: D_PTEXTS, guard: D_GUARD, theme: D_THEME, commands: D_COMMANDS, inbox: D_INBOX, business: D.business, prompts: { blocks: D.blocks, stages: D.stages }, rules: { ...D.rules, weights: D.weights, followupRules: D.followupRules } },
     specs: RULE_SPECS,
     signals: signalRows.map((s) => ({ key: s.key, source: s.source, description: s.description })),
     followupBuckets: Object.fromEntries(Object.entries(FOLLOWUP_RULES).map(([bucket, rules]) => [bucket, rules.map((r) => ({ key: r.key, keyboard: r.keyboard }))])),
@@ -535,6 +550,7 @@ export function settingsView() {
     guard: JSON.parse(JSON.stringify(GUARD)) as GuardSettings,
     theme: { ...THEME },
     commands: { ...COMMANDS } as Dict<string>,
+    inbox: { ...INBOX },
     integrations: {
       metaPixelId: INTEGRATION_OVERRIDES.metaPixelId ?? "",
       metaAccessToken: "", // never leaves the server

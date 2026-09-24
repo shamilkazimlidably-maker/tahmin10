@@ -428,7 +428,7 @@ function Conversations({ initial }: { initial?: string | null }) {
 /* =====================================================================
  *  Ayar sekmeleri için ortak yardımcı
  * ===================================================================== */
-function useSection(section: "business" | "prompts" | "rules" | "texts" | "landing" | "safe" | "gate" | "integrations" | "prompts_full" | "guard" | "theme" | "commands") {
+function useSection(section: "business" | "prompts" | "rules" | "texts" | "landing" | "safe" | "gate" | "integrations" | "prompts_full" | "guard" | "theme" | "commands" | "inbox") {
   const [s, setS] = useState<Any>(null);
   const [draft, setDraft] = useState<Any>(null);
   const [busy, run] = useBusy();
@@ -2081,13 +2081,242 @@ function Advanced() {
 }
 
 /* =====================================================================
+ *  GELEN KUTUSU  (insan operatör modu — Intercom benzeri)
+ * ===================================================================== */
+const BOXES: [string, string][] = [["open", "Açık"], ["unread", "Okunmamış"], ["hot", "🔥 Sıcak (puan yüksek)"], ["checkout", "💳 Ödeme açtı, almadı"], ["joined", "📲 Kanalda, VIP yok"], ["customers", "👑 Müşteriler"], ["starred", "⭐ Yıldızlı"], ["closed", "Kapalı"]];
+const REWRITE: [string, string][] = [["samimi", "🇹🇷 Samimi Türkçe"], ["kisa", "✂️ Kısalt"], ["ikna", "🎯 İkna edici"], ["resmi", "🎩 Resmî"]];
+const ago = (iso?: string | null) => { if (!iso) return "–"; const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000); return m < 1 ? "şimdi" : m < 60 ? `${m} dk` : m < 1440 ? `${Math.round(m / 60)} sa` : `${Math.round(m / 1440)} g`; };
+const clock = (iso: string) => new Date(iso).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+
+function StatusPills({ l }: { l: Any }) {
+  return (
+    <span className="a-row" style={{ gap: 4, flexWrap: "wrap" }}>
+      {l.vip_active ? <Pill tone="green">👑 VIP</Pill> : l.paid ? <Pill tone="amber">ödemiş, VIP bitmiş</Pill> : null}
+      {l.free_channel_joined ? <Pill tone="blue">📲 kanalda</Pill> : l.free_channel_invited ? <Pill>davet edildi, girmedi</Pill> : <Pill>kanal daveti yok</Pill>}
+      {l.checkout_started && !l.paid && <Pill tone="amber">💳 ödeme sayfası açtı{l.last_checkout_plan ? ` (${PLAN_TR[l.last_checkout_plan] ?? l.last_checkout_plan})` : ""}</Pill>}
+      {l.opted_out && <Pill tone="red">🛑 DUR dedi</Pill>}
+      {l.blocked && <Pill tone="red">botu engelledi</Pill>}
+      {l.do_not_sell && <Pill tone="red">satış yapma</Pill>}
+      {l.origin === "channel_post" && <Pill>📣 kanal paylaşımı</Pill>}
+    </span>
+  );
+}
+
+function Inbox() {
+  const [box, setBox] = useState("open");
+  const [tag, setTag] = useState("");
+  const [q, setQ] = useState("");
+  const [rows, setRows] = useState<Any[]>([]);
+  const [tags, setTags] = useState<Any[]>([]);
+  const [canned, setCanned] = useState<Any[]>([]);
+  const [sel, setSel] = useState<string | null>(null);
+  const [conv, setConv] = useState<Any>(null);
+  const [text, setText] = useState("");
+  const [allow, setAllow] = useState(false);
+  const [why, setWhy] = useState<string | null>(null);
+  const [showCanned, setShowCanned] = useState(false);
+  const [side, setSide] = useState<"kisi" | "yardimci" | "ayarlar">("kisi");
+  const [todo, setTodo] = useState<Any>(null);
+  const [coach, setCoach] = useState<Any>(null);
+  const [busy, run] = useBusy();
+  const listRef = useRef<HTMLDivElement>(null);
+  const load = useCallback(() => run("list", async () => { const r = await api("inbox_list", { box, tag, q }); setRows(r.rows); setTags(r.tags); setCanned(r.canned); }), [box, tag, q, run]);
+  const open = useCallback((id: string) => run("open", async () => { setSel(id); const c = await api("inbox_get", { lead_id: id }); setConv(c); setWhy(null); setRows((rs) => rs.map((r) => (r.id === id ? { ...r, unread_count: 0 } : r))); setTimeout(() => listRef.current?.scrollTo({ top: 1e9 }), 50); }), [run]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { const t = setInterval(() => { load(); if (sel) api("inbox_get", { lead_id: sel, mark_read: true }).then((c) => setConv(c)).catch(() => undefined); }, 15000); return () => clearInterval(t); }, [load, sel]);
+  useEffect(() => { const p = new URLSearchParams(window.location.search).get("lead"); if (p && !sel) open(p); }, [open, sel]);
+
+  const send = (action?: "invite" | "plans") => run("send", async () => {
+    if (!sel) return;
+    await api("inbox_send", { lead_id: sel, text, action: action ?? null, allowClaims: allow });
+    setText(""); setAllow(false); setWhy(null);
+    setConv(await api("inbox_get", { lead_id: sel })); await load();
+    setTimeout(() => listRef.current?.scrollTo({ top: 1e9 }), 50);
+  }, "Gönderildi.");
+  const meta = (patch: Record<string, unknown>) => run("meta", async () => { if (!sel) return; await api("inbox_meta", { lead_id: sel, patch }); setConv(await api("inbox_get", { lead_id: sel, mark_read: false })); await load(); });
+  const suggest = () => run("suggest", async () => { if (!sel) return; const r = await api("inbox_suggest", { lead_id: sel, hint: text.trim() || undefined }); setText(r.suggestion); setWhy(`${r.why}${r.nextStep && r.nextStep !== "none" ? ` · önerilen adım: ${r.nextStep === "invite" ? "kanal daveti düğmesiyle gönder" : r.nextStep === "plans" ? "planları gönder" : r.nextStep === "wait" ? "bekle" : r.nextStep}` : ""}`); });
+  const rewrite = (style: string) => run("rw", async () => { if (!text.trim()) return; const r = await api("inbox_rewrite", { text, style }); setText(r.text); });
+  const useCanned = (c: Any) => { const name = conv?.lead?.first_name ? ` ${conv.lead.first_name}` : ""; setText((t) => (t ? t + "\n" : "") + String(c.text).replaceAll("{name}", name)); setShowCanned(false); if (c.action) setWhy(`Bu şablon gönderilirken ${c.action === "invite" ? "kanal daveti düğmesi" : "plan düğmeleri"} eklenir — "${c.action === "invite" ? "📲 Davetle gönder" : "👑 Planlarla gönder"}" düğmesini kullanın.`); };
+  const check = () => run("check", async () => { if (!sel) return; const r = await api("inbox_check", { lead_id: sel }); notify(r.joined ? `✅ Kanalda${r.vip ? " · VIP kanalında da" : ""}` : "❌ Ücretsiz kanalda değil"); setConv(await api("inbox_get", { lead_id: sel, mark_read: false })); await load(); });
+  const L = conv?.lead;
+  const tagColor = (n: string) => tags.find((t: Any) => t.name === n)?.color ?? "#1f6fd1";
+  const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (text.trim()) send(); } if (e.key === "/" && !text) { setShowCanned(true); } };
+  const cannedFiltered = canned.filter((c: Any) => !text.startsWith("/") || `${c.shortcut ?? ""} ${c.title}`.toLowerCase().includes(text.slice(1).toLowerCase()));
+
+  return (
+    <>
+      <style>{`.ib{display:grid;grid-template-columns:300px 1fr 300px;gap:12px;height:calc(100vh - 150px);min-height:560px}.ib>div{border:1px solid #e1e8e4;border-radius:14px;background:#fff;display:flex;flex-direction:column;overflow:hidden}.ib-list{overflow:auto;flex:1}.ib-row{padding:10px 12px;border-bottom:1px solid #eef2ef;cursor:pointer;display:grid;grid-template-columns:1fr auto;gap:4px 8px}.ib-row:hover{background:#f6f9f7}.ib-row.on{background:#eaf6ee}.ib-row .n{font-weight:700;font-size:14px}.ib-row .p{font-size:12.5px;color:#5d6e64;grid-column:1/3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ib-row .t{font-size:11px;color:#8a988f}.ib-badge{background:#0b7a3b;color:#fff;border-radius:999px;font-size:11px;padding:1px 7px;font-weight:700}.ib-head{padding:10px 14px;border-bottom:1px solid #eef2ef;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}.ib-msgs{flex:1;overflow:auto;padding:14px;background:#eef1ef;display:flex;flex-direction:column;gap:8px}.ib-m{max-width:78%;padding:8px 11px;border-radius:14px;font-size:14.5px;line-height:1.4;white-space:pre-wrap;word-break:break-word;position:relative}.ib-m.u{align-self:flex-start;background:#fff;border-bottom-left-radius:4px}.ib-m.a{align-self:flex-end;background:#d9f2e3;border-bottom-right-radius:4px}.ib-m.b{align-self:flex-end;background:#e8eefb;border-bottom-right-radius:4px}.ib-m.e{align-self:center;background:transparent;color:#6b7c72;font-size:12px;max-width:90%;text-align:center}.ib-m small{display:block;font-size:10.5px;color:#7d8c83;margin-top:3px}.ib-m img{max-width:280px;border-radius:10px;display:block;margin-bottom:4px}.ib-m audio,.ib-m video{max-width:280px;display:block;margin-bottom:4px}.ib-comp{border-top:1px solid #eef2ef;padding:10px 12px;display:grid;gap:8px;position:relative}.ib-comp textarea{width:100%;min-height:74px;font:14.5px/1.45 var(--body,system-ui);padding:9px 10px;border:1px solid #cfd8d2;border-radius:10px;resize:vertical}.ib-canned{position:absolute;bottom:100%;left:12px;right:12px;background:#fff;border:1px solid #d5ddd8;border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.15);max-height:260px;overflow:auto;z-index:5}.ib-canned button{display:block;width:100%;text-align:left;padding:8px 12px;border:0;background:none;border-bottom:1px solid #f0f3f1;cursor:pointer;font-size:13.5px}.ib-canned button:hover{background:#f4f8f5}.ib-side{overflow:auto;padding:12px;font-size:13.5px}.ib-side h3{margin:12px 0 6px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:#5d6e64}.ib-tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;color:#fff;margin:0 4px 4px 0;cursor:pointer}.ib-tag.off{opacity:.35}@media(max-width:1100px){.ib{grid-template-columns:1fr;height:auto}.ib>div{max-height:70vh}}`}</style>
+      <div className="a-row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
+        <h1 style={{ margin: 0 }}>Gelen Kutusu</h1>
+        <div className="a-row"><Btn small kind={side === "kisi" ? undefined : "soft"} onClick={() => setSide("kisi")}>👤 Kişi</Btn><Btn small kind={side === "yardimci" ? undefined : "soft"} onClick={() => setSide("yardimci")}>🤖 AI yardımcı</Btn><Btn small kind={side === "ayarlar" ? undefined : "soft"} onClick={() => setSide("ayarlar")}>⚙️ Şablonlar & ayarlar</Btn></div>
+      </div>
+      <div className="ib">
+        {/* ---- liste ---- */}
+        <div>
+          <div style={{ padding: 10, borderBottom: "1px solid #eef2ef", display: "grid", gap: 6 }}>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="🔎 ad / kullanıcı adı" />
+            <select value={box} onChange={(e) => setBox(e.target.value)}>{BOXES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+            <div>{tags.map((t: Any) => <span key={t.id} className={`ib-tag ${tag && tag !== t.name ? "off" : ""}`} style={{ background: t.color }} onClick={() => setTag(tag === t.name ? "" : t.name)}>#{t.name}</span>)}</div>
+          </div>
+          <div className="ib-list">
+            {rows.map((r) => (
+              <div key={r.id} className={`ib-row ${sel === r.id ? "on" : ""}`} onClick={() => open(r.id)}>
+                <span className="n">{r.starred ? "⭐ " : ""}{r.first_name ?? "?"} {r.username ? <span className="a-help">@{r.username}</span> : null}</span>
+                <span className="t">{ago(r.last_message_at)} {r.unread_count > 0 && <span className="ib-badge">{r.unread_count}</span>}</span>
+                <span className="p">{r.last_message_preview ?? "(mesaj yok)"}</span>
+                <span className="p" style={{ fontSize: 11.5 }}>{r.vip_active ? "👑 VIP · " : r.paid ? "💰 ödemiş · " : ""}{r.free_channel_joined ? "📲 kanalda · " : r.free_channel_invited ? "davetli · " : ""}{r.checkout_started && !r.paid ? "💳 ödeme açtı · " : ""}puan {r.score}{(r.tags ?? []).length ? " · " + r.tags.map((x: string) => `#${x}`).join(" ") : ""}</span>
+              </div>
+            ))}
+            {!rows.length && <p className="a-help" style={{ padding: 14 }}>{busy === "list" ? "Yükleniyor…" : "Bu kutuda konuşma yok."}</p>}
+          </div>
+        </div>
+
+        {/* ---- sohbet ---- */}
+        <div>
+          {!conv ? <p className="a-help" style={{ padding: 20 }}>Soldan bir konuşma seçin.</p> : (
+            <>
+              <div className="ib-head">
+                <b style={{ fontSize: 16 }}>{L.first_name ?? "?"}</b>{L.username && <a href={`https://t.me/${L.username}`} target="_blank" rel="noreferrer" className="a-help">@{L.username}</a>}
+                <StatusPills l={L} />
+                <span className="a-help">puan {L.score} · {STAGE_TR[L.stage] ?? L.stage}</span>
+                <span style={{ flex: 1 }} />
+                <Btn small kind="soft" onClick={check} busy={busy === "check"}>✅ Üyeliği kontrol et</Btn>
+                <Btn small kind="soft" onClick={() => meta({ starred: !L.starred })}>{L.starred ? "⭐" : "☆"}</Btn>
+                <Btn small kind="soft" onClick={() => meta({ inbox_status: L.inbox_status === "closed" ? "open" : "closed" })}>{L.inbox_status === "closed" ? "Yeniden aç" : "Kapat"}</Btn>
+              </div>
+              <div className="ib-msgs" ref={listRef}>
+                {conv.messages.map((m: Any) => (
+                  <div key={m.id} className={`ib-m ${m.role === "user" ? "u" : m.role === "event" ? "e" : m.agent ? "a" : "b"}`}>
+                    {m.media_file_id && (m.media_type === "photo" || m.media_type === "sticker") && <img src={`/api/admin/media?file=${m.media_file_id}`} alt="" />}
+                    {m.media_file_id && (m.media_type === "voice" || m.media_type === "audio") && <audio controls preload="none" src={`/api/admin/media?file=${m.media_file_id}`} />}
+                    {m.media_file_id && (m.media_type === "video" || m.media_type === "video_note") && <video controls preload="none" src={`/api/admin/media?file=${m.media_file_id}`} />}
+                    {m.media_file_id && m.media_type === "document" && <a href={`/api/admin/media?file=${m.media_file_id}`} target="_blank" rel="noreferrer">📎 {m.media_name ?? "dosyayı aç"}</a>}
+                    {m.media_file_id && (m.media_type === "voice" || m.media_type === "audio") && <span className="a-help" style={{ fontSize: 11 }}>Ses çalmazsa (Safari): <a href={`/api/admin/media?file=${m.media_file_id}`} target="_blank" rel="noreferrer">indir</a></span>}
+                    {m.role !== "event" || !m.media_file_id ? m.content : null}
+                    <small>{m.role === "user" ? "" : m.role === "event" ? "" : m.agent ? "siz · " : "bot · "}{clock(m.created_at)}</small>
+                  </div>
+                ))}
+              </div>
+              <div className="ib-comp">
+                {showCanned && <div className="ib-canned">{cannedFiltered.map((c: Any) => <button key={c.id} type="button" onClick={() => useCanned(c)}><b>{c.title}</b>{c.shortcut ? <span className="a-help"> /{c.shortcut}</span> : null}{c.action ? <span className="a-help"> · {c.action === "invite" ? "📲 davet düğmesi" : "👑 plan düğmeleri"}</span> : null}<br /><span className="a-help">{String(c.text).slice(0, 110)}</span></button>)}{!cannedFiltered.length && <button type="button" disabled>Şablon yok</button>}<button type="button" onClick={() => setShowCanned(false)} style={{ color: "#c0392b" }}>Kapat</button></div>}
+                {why && <div className="a-info" style={{ margin: 0, fontSize: 13 }}>🤖 {why}</div>}
+                <textarea value={text} onChange={(e) => { setText(e.target.value); if (e.target.value.startsWith("/")) setShowCanned(true); else if (showCanned && !e.target.value.startsWith("/")) setShowCanned(false); }} onKeyDown={onKey} placeholder={L.blocked ? "Kişi botu engellemiş." : L.opted_out ? "Kişi DUR dedi — yazmayın." : "Mesajınız… (Enter gönderir, Shift+Enter satır; / ile şablon)"} disabled={Boolean(L.blocked)} />
+                <div className="a-row" style={{ gap: 6 }}>
+                  <Btn small onClick={() => send()} busy={busy === "send"} disabled={!text.trim()}>Gönder</Btn>
+                  <Btn small kind="ghost" onClick={() => send("invite")} busy={busy === "send"}>📲 Davetle gönder</Btn>
+                  <Btn small kind="ghost" onClick={() => send("plans")} busy={busy === "send"}>👑 Planlarla gönder</Btn>
+                  <Btn small kind="soft" onClick={() => setShowCanned((v) => !v)}>📋 Şablon</Btn>
+                  <span style={{ flex: 1 }} />
+                  <Btn small kind="soft" onClick={suggest} busy={busy === "suggest"}>✨ AI öneri</Btn>
+                  {REWRITE.map(([k, l]) => <Btn key={k} small kind="soft" onClick={() => rewrite(k)} busy={busy === "rw"} disabled={!text.trim()}>{l}</Btn>)}
+                </div>
+                <label className="a-row" style={{ gap: 6, fontSize: 12 }}><input type="checkbox" style={{ width: 16 }} checked={allow} onChange={(e) => setAllow(e.target.checked)} /> Uyarıya rağmen gönder (banko/garanti gibi ifadeler engellenir; işaretlerseniz yine de gider)</label>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* ---- sağ panel ---- */}
+        <div className="ib-side">
+          {side === "kisi" && (conv ? (
+            <>
+              <h3>Durum</h3>
+              <p>Aşama: <b>{STAGE_TR[L.stage] ?? L.stage}</b> · İlgi puanı: <b>{L.score}</b> / 100 {L.score >= 60 && <Pill tone="green">VIP anlatılabilir</Pill>}</p>
+              <p style={{ marginTop: 4 }}>Kanal: {L.free_channel_joined ? "girdi ✅" : L.free_channel_invited ? "davet edildi, girmedi" : "davet yok"}<br />VIP: {L.vip_active ? "aktif 👑" : L.paid ? "ödemiş, bitmiş" : "yok"}{L.checkout_started ? <><br />Ödeme sayfası: açtı{L.last_checkout_plan ? ` (${PLAN_TR[L.last_checkout_plan] ?? L.last_checkout_plan})` : ""}</> : null}<br />Geldiği yer: {L.origin === "channel_post" ? `kanal paylaşımı #${L.origin_post_id}` : L.landing_url ? "reklam / site" : "doğrudan bot"}{L.campaign ? ` · ${L.campaign}` : ""}<br />İlk geliş: {when(L.created_at)} · Son mesajı: {ago(L.last_user_message_at)} önce · Son cevabınız: {ago(L.last_agent_reply_at)} önce</p>
+              <h3>Etiketler</h3>
+              <div>{tags.map((t: Any) => { const on = (L.tags ?? []).includes(t.name); return <span key={t.id} className={`ib-tag ${on ? "" : "off"}`} style={{ background: t.color }} onClick={() => meta({ tags: on ? L.tags.filter((x: string) => x !== t.name) : [...(L.tags ?? []), t.name] })}>#{t.name}</span>; })}</div>
+              <h3>Not (yalnızca siz görürsünüz)</h3>
+              <Txt value={L.note ?? ""} onChange={(v) => setConv({ ...conv, lead: { ...L, note: v } })} rows={3} />
+              <Btn small kind="soft" onClick={() => meta({ note: L.note })}>Notu kaydet</Btn>
+              <h3>Yapay zekânın çıkardığı profil</h3>
+              {conv.profile ? <p>{[conv.profile.favorite_team && `Takım: ${conv.profile.favorite_team}`, conv.profile.leagues?.length && `Ligler: ${conv.profile.leagues.join(", ")}`, conv.profile.prediction_usage && `Tahmin kullanımı: ${conv.profile.prediction_usage}`, conv.profile.wants?.length && `İstiyor: ${conv.profile.wants.join("; ")}`, conv.profile.pain_points?.length && `Dertleri: ${conv.profile.pain_points.join("; ")}`, conv.profile.objections?.length && `İtirazlar: ${conv.profile.objections.join(", ")}`, conv.profile.notes && `Not: ${conv.profile.notes}`].filter(Boolean).map((x, i) => <span key={i}>{x}<br /></span>)}</p> : <p className="a-help">Henüz yok.</p>}
+              <h3>Sinyaller</h3>
+              {conv.signals.length ? conv.signals.slice(0, 12).map((s: Any, i: number) => <p key={i} style={{ fontSize: 12.5 }}>• {SIGNAL_TR[s.signal_key] ?? s.signal_key}{s.evidence ? <span className="a-help"> — “{s.evidence}”</span> : null}</p>) : <p className="a-help">Henüz yok.</p>}
+              <h3>Tehlikeli</h3>
+              <Btn small kind="danger" onClick={() => window.confirm("Bu kişiye satış kapatılsın mı (satış yapma işareti)?") && api("lead_action", { id: sel, op: "sell_off" }).then(() => open(sel!))}>Satışı kapat</Btn>
+            </>
+          ) : <p className="a-help">Bir konuşma seçince kişinin durumu burada görünür.</p>)}
+
+          {side === "yardimci" && (
+            <>
+              <h3>Bugün kime yazmalıyım?</h3>
+              <p className="a-help">Yapay zekâ açık konuşmaları önceliklendirir: okunmamışlar, ödeme açıp almayanlar, puanı yüksekler, kanala girmeyenler.</p>
+              <Btn small onClick={() => run("todo", async () => setTodo(await api("inbox_todo")))} busy={busy === "todo"}>Liste çıkar</Btn>
+              {todo?.items?.map((i: Any) => <div key={i.lead_id} style={{ border: "1px solid #e1e8e4", borderRadius: 10, padding: 8, marginTop: 8 }}><b>{i.priority}. {i.name}</b> <span className="a-help">— {i.reason}</span><br /><span style={{ fontSize: 13 }}>“{i.suggested_first_line}”</span><div className="a-row" style={{ marginTop: 6 }}><Btn small onClick={() => { open(i.lead_id); setText(i.suggested_first_line); setSide("kisi"); }}>Aç ve yaz</Btn></div></div>)}
+              {todo && !todo.items?.length && <p className="a-help" style={{ marginTop: 8 }}>Şu an bekleyen kimse yok 👍</p>}
+              <h3 style={{ marginTop: 18 }}>Satış koçu (her 10 konuşmada)</h3>
+              <p className="a-help">Cevap yazdığınız son konuşmaları okur; hangi cümleler satıyor, hangileri kaybettiriyor, ne yazmalısınız. DeepSeek ücreti küçüktür, 1–2 dakika sürer.</p>
+              <div className="a-row"><Btn small onClick={() => run("coach", async () => setCoach((await api("inbox_coach")).entry))} busy={busy === "coach"}>Son konuşmaları analiz et</Btn><Btn small kind="soft" onClick={() => run("ch", async () => setCoach((await api("inbox_coach_history")).history?.[0] ?? null))}>Son raporu göster</Btn></div>
+              {busy === "coach" && <p className="a-help">Analiz ediliyor… sayfayı kapatmayın.</p>}
+              {coach?.report && <CoachReport r={coach.report} at={coach.at} n={coach.conversations} />}
+            </>
+          )}
+
+          {side === "ayarlar" && <InboxSettings tags={tags} canned={canned} onTags={setTags} onCanned={setCanned} />}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function CoachReport({ r, at, n }: { r: Any; at: string; n: number }) {
+  const list = (title: string, items?: string[]) => (items?.length ? <><h3>{title}</h3>{items.map((x, i) => <p key={i} style={{ fontSize: 13 }}>• {x}</p>)}</> : null);
+  return (
+    <div style={{ marginTop: 8 }}>
+      <p className="a-help">{when(at)} · {n} konuşma</p>
+      <p style={{ fontSize: 13.5 }}>{r.ozet}</p>
+      {list("Satan kalıplar", r.satan_kaliplar)}{list("Kaybettiren kalıplar", r.kaybettiren_kaliplar)}
+      {r.cevap_suresi && <><h3>Cevap süresi</h3><p style={{ fontSize: 13 }}>{r.cevap_suresi}</p></>}
+      {(r.oneriler ?? []).length ? <><h3>Öneriler</h3>{r.oneriler.map((o: Any, i: number) => <div key={i} style={{ border: "1px solid #e1e8e4", borderRadius: 10, padding: 8, marginBottom: 6 }}><b>{o.oncelik}. {o.baslik}</b><br /><span style={{ fontSize: 13 }}>{o.neden}</span>{o.ornek_cumle && <><br /><span style={{ fontSize: 13 }}>Örnek: “{o.ornek_cumle}”</span></>}</div>)}</> : null}
+      {(r.sablon_onerileri ?? []).length ? <><h3>Şablon önerileri</h3>{r.sablon_onerileri.map((t: Any, i: number) => <div key={i} style={{ marginBottom: 6 }}><b>{t.baslik}</b><br /><span style={{ fontSize: 13 }}>{t.metin}</span><div className="a-row" style={{ marginTop: 4 }}><Btn small kind="soft" onClick={() => api("canned_save", { title: t.baslik, text: t.metin, category: "koç" }).then(() => notify("Şablon eklendi.")).catch((e: Error) => notify(e.message, true))}>Şablon yap</Btn></div></div>)}</> : null}
+      {list("İzlenecekler", r.izlenecek)}
+    </div>
+  );
+}
+
+function InboxSettings({ tags, canned, onTags, onCanned }: { tags: Any[]; canned: Any[]; onTags: (t: Any[]) => void; onCanned: (c: Any[]) => void }) {
+  const { s, draft: g, upd, save, reset, busy, dirty } = useSection("inbox");
+  const [nt, setNt] = useState({ name: "", color: "#1f6fd1" });
+  const [nc, setNc] = useState<Any>({ id: null, title: "", shortcut: "", text: "", action: "", category: "" });
+  const [tb, run] = useBusy();
+  if (!g || !s) return <p className="a-help">Yükleniyor…</p>;
+  return (
+    <>
+      <h3>Mod</h3>
+      <select value={g.mode} onChange={(e) => upd(["mode"], e.target.value)}><option value="human">👤 İnsan operatör (mesajlar buraya düşer)</option><option value="ai">🤖 Yapay zekâ kendisi satar (eski mod)</option></select>
+      <label className="a-row" style={{ gap: 6, fontSize: 13, marginTop: 8 }}><input type="checkbox" style={{ width: 16 }} checked={Boolean(g.notifyTelegram)} onChange={(e) => upd(["notifyTelegram"], e.target.checked)} /> Yeni mesajda Telegram'ıma bildirim gönder</label>
+      <div style={{ width: 200, marginTop: 6 }}><Field label="Aynı kişi için bildirim aralığı (dk)"><Num value={g.notifyCooldownMinutes} min={0} max={1440} onChange={(v) => upd(["notifyCooldownMinutes"], v)} /></Field></div>
+      <Field label="Kanala girince otomatik gönderilen mesaj (boş = gönderme)"><Txt value={g.joinedMessage} onChange={(v) => upd(["joinedMessage"], v)} rows={3} /></Field>
+      <Field label="Operatör adı (yalnızca panelde)"><input value={g.agentName} onChange={(e) => upd(["agentName"], e.target.value)} /></Field>
+      <SaveBar onSave={save} onReset={reset} busy={busy} dirty={dirty} />
+
+      <h3 style={{ marginTop: 18 }}>Etiketler</h3>
+      {tags.map((t: Any) => <div key={t.id} className="a-row" style={{ marginBottom: 4 }}><span className="ib-tag" style={{ background: t.color }}>#{t.name}</span><Btn small kind="danger" onClick={() => run(`td${t.id}`, async () => onTags((await api("tag_delete", { id: t.id })).tags))}>Sil</Btn></div>)}
+      <div className="a-row" style={{ alignItems: "flex-end" }}><div style={{ flex: 1 }}><Field label="Yeni etiket"><input value={nt.name} onChange={(e) => setNt({ ...nt, name: e.target.value })} placeholder="ör. galatasaraylı" /></Field></div><input type="color" value={nt.color} onChange={(e) => setNt({ ...nt, color: e.target.value })} style={{ width: 44, height: 36, marginBottom: 10 }} /><div className="a-field"><Btn small onClick={() => run("ta", async () => { onTags((await api("tag_save", nt)).tags); setNt({ name: "", color: "#1f6fd1" }); })} busy={tb === "ta"}>Ekle</Btn></div></div>
+
+      <h3 style={{ marginTop: 18 }}>Hazır cevaplar (şablonlar)</h3>
+      <p className="a-help">Editörde “/” yazınca açılır. {"{name}"} kişinin adını koyar. “Düğme” seçilirse gönderirken davet ya da plan düğmeleri eklenir.</p>
+      {canned.map((c: Any) => <div key={c.id} style={{ borderBottom: "1px solid #eef2ef", padding: "6px 0" }}><b>{c.title}</b> {c.shortcut && <span className="a-help">/{c.shortcut}</span>} {c.action && <Pill>{c.action === "invite" ? "📲 davet" : "👑 planlar"}</Pill>} <span className="a-help">· {c.uses} kez</span><br /><span style={{ fontSize: 12.5 }}>{String(c.text).slice(0, 140)}</span><div className="a-row" style={{ marginTop: 4 }}><Btn small kind="soft" onClick={() => setNc({ id: c.id, title: c.title, shortcut: c.shortcut ?? "", text: c.text, action: c.action ?? "", category: c.category ?? "" })}>Düzenle</Btn><Btn small kind="danger" onClick={() => window.confirm("Şablon silinsin mi?") && run(`cd${c.id}`, async () => onCanned((await api("canned_delete", { id: c.id })).canned))}>Sil</Btn></div></div>)}
+      <div style={{ marginTop: 10, borderTop: "2px solid #e1e8e4", paddingTop: 10 }}>
+        <b>{nc.id ? `Şablonu düzenle #${nc.id}` : "Yeni şablon"}</b>
+        <Field label="Başlık"><input value={nc.title} onChange={(e) => setNc({ ...nc, title: e.target.value })} /></Field>
+        <div className="a-row"><div style={{ flex: 1 }}><Field label="Kısayol (/…)"><input value={nc.shortcut} onChange={(e) => setNc({ ...nc, shortcut: e.target.value })} placeholder="selam" /></Field></div><div style={{ flex: 1 }}><Field label="Kategori"><input value={nc.category} onChange={(e) => setNc({ ...nc, category: e.target.value })} /></Field></div></div>
+        <Field label="Metin"><Txt value={nc.text} onChange={(v) => setNc({ ...nc, text: v })} rows={4} /></Field>
+        <Field label="Düğme"><select value={nc.action} onChange={(e) => setNc({ ...nc, action: e.target.value })}><option value="">Yok</option><option value="invite">📲 Ücretsiz kanal daveti</option><option value="plans">👑 Plan düğmeleri</option></select></Field>
+        <div className="a-row"><Btn small onClick={() => run("cs", async () => { onCanned((await api("canned_save", { ...nc, id: nc.id ?? undefined, action: nc.action || null })).canned); setNc({ id: null, title: "", shortcut: "", text: "", action: "", category: "" }); }, "Kaydedildi.")} busy={tb === "cs"}>Kaydet</Btn>{nc.id && <Btn small kind="soft" onClick={() => setNc({ id: null, title: "", shortcut: "", text: "", action: "", category: "" })}>Vazgeç</Btn>}</div>
+      </div>
+    </>
+  );
+}
+
+/* =====================================================================
  *  Kabuk: giriş + menü
  * ===================================================================== */
-const TABS: [string, string][] = [["ozet", "📊 Genel Bakış"], ["analiz", "📈 Analiz"], ["konusmalar", "💬 Konuşmalar"], ["destek", "🆘 Destek Talepleri"], ["paylasim", "📣 Kanal Paylaşımları"], ["isletme", "🏷️ İşletme Bilgileri"], ["asistan", "🤖 Satış Asistanı"], ["mesajlar", "✉️ Hazır Mesajlar"], ["kurallar", "⚖️ Kurallar ve Puanlama"], ["ogrenme", "🧠 Öğrenme"], ["sayfa", "🌐 Açılış Sayfası"], ["filtre", "🛡️ Ziyaretçi Filtresi"], ["verimerkezi", "🧾 Veri Merkezi Sayfası"], ["entegrasyon", "🔌 Entegrasyonlar"], ["kitleler", "🎯 Hedef Kitleler"], ["gelismis", "🧰 Gelişmiş Ayarlar"], ["odemeler", "💳 Ödemeler"], ["veri", "🗑️ Veri Yönetimi"], ["sistem", "🛠️ Sistem"]];
+const TABS: [string, string][] = [["inbox", "💬 Gelen Kutusu"], ["ozet", "📊 Genel Bakış"], ["analiz", "📈 Analiz"], ["konusmalar", "💬 Konuşmalar"], ["destek", "🆘 Destek Talepleri"], ["paylasim", "📣 Kanal Paylaşımları"], ["isletme", "🏷️ İşletme Bilgileri"], ["asistan", "🤖 Satış Asistanı"], ["mesajlar", "✉️ Hazır Mesajlar"], ["kurallar", "⚖️ Kurallar ve Puanlama"], ["ogrenme", "🧠 Öğrenme"], ["sayfa", "🌐 Açılış Sayfası"], ["filtre", "🛡️ Ziyaretçi Filtresi"], ["verimerkezi", "🧾 Veri Merkezi Sayfası"], ["entegrasyon", "🔌 Entegrasyonlar"], ["kitleler", "🎯 Hedef Kitleler"], ["gelismis", "🧰 Gelişmiş Ayarlar"], ["odemeler", "💳 Ödemeler"], ["veri", "🗑️ Veri Yönetimi"], ["sistem", "🛠️ Sistem"]];
 
 export default function AdminPage() {
   const [auth, setAuth] = useState<"checking" | "in" | "out">("checking");
-  const [tab, setTab] = useState("ozet");
+  const [tab, setTab] = useState<string>(() => (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tab")) || "inbox");
   const [openLead, setOpenLead] = useState<string | null>(null);
   const [pw, setPw] = useState("");
   const [toast, setToast] = useState<{ text: string; bad: boolean } | null>(null);
@@ -2132,6 +2361,7 @@ export default function AdminPage() {
           <div className="a-shell">
             <nav className="a-nav">{TABS.map(([k, l]) => <button key={k} className={tab === k ? "on" : ""} onClick={() => { setOpenLead(null); setTab(k); }}>{l}</button>)}</nav>
             <main className="a-main">
+              {tab === "inbox" && <Inbox />}
               {tab === "ozet" && <Overview go={setTab} />}
               {tab === "analiz" && <Analytics />}
               {tab === "konusmalar" && <Conversations key={openLead ?? "list"} initial={openLead} />}

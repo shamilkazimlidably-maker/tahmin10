@@ -70,6 +70,11 @@ Telegram webhook'u ve komutları kaydeder, veritabanını, kanal yetkilerini, Wh
 ### 9. Meta
 Panel → Entegrasyonlar → Pixel ID, Conversions API token ve test kodu. "Bağlantıyı test et". Events Manager → Test events'te Contact, Lead, CompleteRegistration, InitiateCheckout, Purchase görünmeli. Yayından önce test kodunu silin. Panel → Hedef Kitleler sekmesi yeniden hedefleme tariflerini içerir.
 
+## İki çalışma modu
+
+- **İnsan operatör (varsayılan):** bota gelen her mesaj (yazı, ses, fotoğraf, video, dosya) panel → Gelen Kutusu'na düşer; siz ya da operatörünüz oradan cevaplar, cevap bot üzerinden gider. Yapay zekâ cevap yazmaz; puanlar, cevap önerir, yazdığınızı samimi Türkçeye çevirir, "bugün kime yazmalıyım" listesi çıkarır ve her 10 konuşmada koç raporu verir. Karşılama + kanal düğmesi, "Katıldım" doğrulaması, komutlar ve ödeme sonrası VIP linki yine otomatik. Kurulum: `supabase/inbox.sql`.
+- **Yapay zekâ satış asistanı:** Gelen Kutusu → Şablonlar & ayarlar → Mod'dan açılır; bot kendisi konuşur ve satar.
+
 ## Günlük kullanım
 
 - **Konuşmalar**: her sohbeti okuyun, 1–5 puan verin, not yazın — koçun en güçlü girdisi.

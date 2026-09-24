@@ -26,6 +26,15 @@ export type Lead = {
   landing_url: string | null;
   origin: string | null;
   origin_post_id: number | null;
+  unread_count: number;
+  last_message_at: string | null;
+  last_message_preview: string | null;
+  last_agent_reply_at: string | null;
+  last_notified_at: string | null;
+  inbox_status: "open" | "closed";
+  tags: string[];
+  starred: boolean;
+  note: string | null;
 
   stage: Stage;
   score: number;
