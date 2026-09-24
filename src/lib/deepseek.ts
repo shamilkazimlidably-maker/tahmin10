@@ -39,8 +39,24 @@ function parseLooseJson(text: string): unknown {
   }
   const first = cleaned.indexOf("{");
   const last = cleaned.lastIndexOf("}");
-  if (first >= 0 && last > first) return JSON.parse(cleaned.slice(first, last + 1));
+  if (first >= 0 && last > first) {
+    try { return JSON.parse(cleaned.slice(first, last + 1)); } catch { /* fall through */ }
+  }
+  // Kesilmiş / bozuk JSON: en azından "messages" dizisini kurtar (kişi cevapsız kalmasın).
+  const salvaged = salvageMessages(cleaned);
+  if (salvaged) return salvaged;
   throw new Error("Model did not return JSON.");
+}
+
+/** Truncated output (max_tokens) usually still contains the complete "messages" array at the top. */
+function salvageMessages(text: string): { messages: string[]; _salvaged: true } | null {
+  const m = text.match(/"messages"\s*:\s*\[([\s\S]*?)\]/);
+  const raw = m?.[1] ?? "";
+  const messages: string[] = [];
+  const re = /"((?:[^"\\]|\\.)*)"/g;
+  let s: RegExpExecArray | null;
+  while ((s = re.exec(raw))) { try { messages.push(JSON.parse(`"${s[1]}"`)); } catch { /* skip */ } }
+  return messages.length ? { messages, _salvaged: true } : null;
 }
 
 /**
@@ -94,12 +110,17 @@ export async function deepseekJson(options: JsonCallOptions): Promise<JsonCallRe
       }
 
       const data = (await response.json()) as {
-        choices?: { message?: { content?: string | null } }[];
+        choices?: { message?: { content?: string | null }; finish_reason?: string }[];
         usage?: JsonCallResult["usage"];
       };
       const content = data.choices?.[0]?.message?.content?.trim();
       if (!content) throw new Error(`[${label}] empty content`);
-      return { json: parseLooseJson(content), usage: data.usage ?? null };
+      if (data.choices?.[0]?.finish_reason === "length") console.warn(`[${label}] output truncated at max_tokens=${options.maxTokens ?? 1200}`);
+      try {
+        return { json: parseLooseJson(content), usage: data.usage ?? null };
+      } catch (parseError) {
+        throw new Error(`[${label}] ${(parseError as Error).message}${data.choices?.[0]?.finish_reason === "length" ? " (cevap max_tokens sınırında kesildi)" : ""}: ${content.slice(0, 120)}`);
+      }
     } catch (error) {
       lastError = error;
       if ((error as { fatal?: boolean }).fatal) break;

@@ -173,14 +173,14 @@ function buildMessages(input: AgentInput, correction?: string): ChatMessage[] {
   const dynamic = [
     renderPlaybook(input.playbook, input.stage),
     input.experiments.length
-      ? "# TESTE A/B ATIVO (siga quando a situação se aplicar)\n" + input.experiments.map((e) => `- [${e.slot}] ${e.instruction}`).join("\n")
+      ? "# AKTİF A/B TESTİ (durum uyduğunda uygula)\n" + input.experiments.map((e) => `- [${e.slot}] ${e.instruction}`).join("\n")
       : "",
     renderProfile(input.profile),
     renderState(input.lead, input.stage, input.permissions),
     input.followupMode ? PROMPT_TEXTS.followup : "",
-    input.directive ? `# INSTRUÇÃO PARA ESTA MENSAGEM\n${input.directive}` : "",
-    correction ? `# CORREÇÃO OBRIGATÓRIA\n${correction}` : "",
-    "Responda somente com o objeto json.",
+    input.directive ? `# BU MESAJ İÇİN TALİMAT\n${input.directive}` : "",
+    correction ? `# ZORUNLU DÜZELTME\n${correction}` : "",
+    "Yalnızca json nesnesiyle cevap ver.",
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -210,9 +210,9 @@ export async function runSalesAgent(input: AgentInput): Promise<AgentOutput> {
     const { json } = await deepseekJson({
       messages: buildMessages(input, correction),
       temperature: input.followupMode ? 0.8 : 0.7,
-      maxTokens: 900,
+      maxTokens: 1800,
       thinking: false,
-      timeoutMs: 35_000,
+      timeoutMs: 40_000,
       retries: 1,
       label: "sales-agent",
     });

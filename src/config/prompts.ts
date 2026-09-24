@@ -184,7 +184,8 @@ json kuralları:
 - "objection": null ya da şunlardan biri: "price", "trust", "value", "timing", "results", "other".
 - "risk_flag": null, "underage" ya da "gambling_harm".
 - "signals": yalnızca şu anahtarlar: ${AI_SIGNAL_KEYS.join(", ")}.
-- "profile_update": yalnızca kişinin şimdi açıkladığını doldur; gerisi null ya da [].
+- "profile_update": yalnızca kişinin şimdi açıkladığını doldur; gerisi null ya da []. "notes" en fazla 120 karakter.
+- "evidence" en fazla 60 karakter. Kısa yaz: cevabın tamamı 1500 karakteri geçmesin.
 - Markdown yok, yorum yok, ek alan yok.
 `.trim();
 }

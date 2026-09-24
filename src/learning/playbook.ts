@@ -167,15 +167,15 @@ export async function rejectPlaybook(version: number): Promise<boolean> {
 export function renderPlaybook(playbook: Playbook, stage: Stage): string {
   const c = playbook.content;
   const relevant = c.guidelines.filter((g) => g.stage === "ANY" || g.stage === stage);
-  const lines: string[] = [`# PLAYBOOK v${playbook.version} (advisory — learned from past conversations; FATOS and REGRAS always win)`];
-  if (relevant.length) lines.push("Guidelines for this stage:", ...relevant.map((g) => `- ${g.text}`));
+  const lines: string[] = [`# SATIŞ REHBERİ v${playbook.version} (tavsiye niteliğinde — geçmiş konuşmalardan öğrenildi; BİLGİLER ve DEĞİŞMEZ KURALLAR her zaman önce gelir)`];
+  if (relevant.length) lines.push("Bu aşama için yönergeler:", ...relevant.map((g) => `- ${g.text}`));
   const winners = c.locked_winners.map((w) => `- [${w.slot}] ${w.instruction}`);
-  if (winners.length) lines.push("Proven by A/B test:", ...winners);
+  if (winners.length) lines.push("A/B testiyle kanıtlanmış:", ...winners);
   const objections = Object.entries(c.objection_responses).filter(([, v]) => v);
   if (objections.length && ["ENGAGED", "VIP_OFFERED", "CHECKOUT", "NOT_INTERESTED"].includes(stage)) {
-    lines.push("Objections:", ...objections.map(([k, v]) => `- ${k}: ${v}`));
+    lines.push("İtirazlar:", ...objections.map(([k, v]) => `- ${k}: ${v}`));
   }
-  if (c.avoid.length) lines.push("Avoid:", ...c.avoid.map((a) => `- ${a}`));
-  if (c.segment_tips.length) lines.push("Segments:", ...c.segment_tips.map((t) => `- ${t.segment}: ${t.tip}`));
+  if (c.avoid.length) lines.push("Kaçın:", ...c.avoid.map((a) => `- ${a}`));
+  if (c.segment_tips.length) lines.push("Müşteri tipleri:", ...c.segment_tips.map((t) => `- ${t.segment}: ${t.tip}`));
   return lines.join("\n");
 }
