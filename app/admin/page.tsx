@@ -13,7 +13,7 @@ type Any = any;
 class AuthError extends Error {}
 
 async function api(action: string, body: Record<string, unknown> = {}): Promise<Any> {
-  const r = await fetch("/api/admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, ...body }) });
+  const r = await fetch("/api/admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, action }) });
   const j = await r.json().catch(() => ({ error: "Sunucudan geçersiz cevap geldi." }));
   if (r.status === 401 && action !== "login") throw new AuthError("Oturum süresi doldu.");
   if (!r.ok) throw new Error(j.error || "Bir hata oluştu.");
@@ -2128,7 +2128,7 @@ function Inbox() {
 
   const send = (action?: "invite" | "plans") => run("send", async () => {
     if (!sel) return;
-    await api("inbox_send", { lead_id: sel, text, action: action ?? null, allowClaims: allow });
+    await api("inbox_send", { lead_id: sel, text, button: action ?? null, allowClaims: allow });
     setText(""); setAllow(false); setWhy(null);
     setConv(await api("inbox_get", { lead_id: sel })); await load();
     setTimeout(() => listRef.current?.scrollTo({ top: 1e9 }), 50);
@@ -2187,7 +2187,8 @@ function Inbox() {
               <div className="ib-msgs" ref={listRef}>
                 {conv.messages.map((m: Any) => (
                   <div key={m.id} className={`ib-m ${m.role === "user" ? "u" : m.role === "event" ? "e" : m.agent ? "a" : "b"}`}>
-                    {m.media_file_id && (m.media_type === "photo" || m.media_type === "sticker") && <img src={`/api/admin/media?file=${m.media_file_id}`} alt="" />}
+                    {m.media_file_id && m.media_type === "photo" && <img src={`/api/admin/media?file=${m.media_file_id}`} alt="" />}
+                    {m.media_file_id && m.media_type === "sticker" && <span style={{ fontSize: 40 }}>{m.media_name || "🙂"}</span>}
                     {m.media_file_id && (m.media_type === "voice" || m.media_type === "audio") && <audio controls preload="none" src={`/api/admin/media?file=${m.media_file_id}`} />}
                     {m.media_file_id && (m.media_type === "video" || m.media_type === "video_note") && <video controls preload="none" src={`/api/admin/media?file=${m.media_file_id}`} />}
                     {m.media_file_id && m.media_type === "document" && <a href={`/api/admin/media?file=${m.media_file_id}`} target="_blank" rel="noreferrer">📎 {m.media_name ?? "dosyayı aç"}</a>}
@@ -2303,7 +2304,7 @@ function InboxSettings({ tags, canned, onTags, onCanned }: { tags: Any[]; canned
         <div className="a-row"><div style={{ flex: 1 }}><Field label="Kısayol (/…)"><input value={nc.shortcut} onChange={(e) => setNc({ ...nc, shortcut: e.target.value })} placeholder="selam" /></Field></div><div style={{ flex: 1 }}><Field label="Kategori"><input value={nc.category} onChange={(e) => setNc({ ...nc, category: e.target.value })} /></Field></div></div>
         <Field label="Metin"><Txt value={nc.text} onChange={(v) => setNc({ ...nc, text: v })} rows={4} /></Field>
         <Field label="Düğme"><select value={nc.action} onChange={(e) => setNc({ ...nc, action: e.target.value })}><option value="">Yok</option><option value="invite">📲 Ücretsiz kanal daveti</option><option value="plans">👑 Plan düğmeleri</option></select></Field>
-        <div className="a-row"><Btn small onClick={() => run("cs", async () => { onCanned((await api("canned_save", { ...nc, id: nc.id ?? undefined, action: nc.action || null })).canned); setNc({ id: null, title: "", shortcut: "", text: "", action: "", category: "" }); }, "Kaydedildi.")} busy={tb === "cs"}>Kaydet</Btn>{nc.id && <Btn small kind="soft" onClick={() => setNc({ id: null, title: "", shortcut: "", text: "", action: "", category: "" })}>Vazgeç</Btn>}</div>
+        <div className="a-row"><Btn small onClick={() => run("cs", async () => { onCanned((await api("canned_save", { ...nc, id: nc.id ?? undefined, button: nc.action || null })).canned); setNc({ id: null, title: "", shortcut: "", text: "", action: "", category: "" }); }, "Kaydedildi.")} busy={tb === "cs"}>Kaydet</Btn>{nc.id && <Btn small kind="soft" onClick={() => setNc({ id: null, title: "", shortcut: "", text: "", action: "", category: "" })}>Vazgeç</Btn>}</div>
       </div>
     </>
   );

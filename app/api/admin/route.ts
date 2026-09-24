@@ -309,7 +309,7 @@ async function handle(action: string, body: any): Promise<unknown> {
       return conv;
     }
     case "inbox_send": {
-      await sendAgentReply(String(body.lead_id), String(body.text ?? ""), { action: body.action === "invite" || body.action === "plans" ? body.action : null, allowClaims: Boolean(body.allowClaims) });
+      await sendAgentReply(String(body.lead_id), String(body.text ?? ""), { action: body.button === "invite" || body.button === "plans" ? body.button : null, allowClaims: Boolean(body.allowClaims) });
       if (body.canned_id) await cannedUsed(Number(body.canned_id)).catch(() => undefined);
       return { ok: true };
     }
@@ -332,7 +332,7 @@ async function handle(action: string, body: any): Promise<unknown> {
     case "inbox_coach_history":
       return { history: await coachHistory() };
     case "canned_save":
-      await cannedSave(body as { id?: number; title: string; shortcut?: string | null; text: string; action?: string | null; category?: string });
+      await cannedSave({ ...(body as { id?: number; title: string; shortcut?: string | null; text: string; category?: string }), action: typeof body.button === "string" ? body.button : null });
       return { canned: await cannedList() };
     case "canned_delete":
       await cannedDelete(Number(body.id));

@@ -114,7 +114,7 @@ async function onMessage(m: Message, replied: () => Promise<void>): Promise<void
   if (isAdminChat(m.chat.id) && m.reply_to_message && (await handleAdminReply(m))) return replied();
 
   const text = m.text?.trim();
-  if (!text && isHumanMode() && !isAdminChat(m.chat.id)) {
+  if (!text && isHumanMode()) {
     // İnsan operatör modu: ses, fotoğraf, video, dosya panele düşer.
     const media: InboundMedia | null =
       m.photo?.length ? { kind: "photo", fileId: m.photo[m.photo.length - 1]!.file_id, caption: m.caption } :
