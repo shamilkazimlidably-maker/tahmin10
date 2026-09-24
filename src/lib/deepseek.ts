@@ -69,6 +69,10 @@ export async function deepseekJson(options: JsonCallOptions): Promise<JsonCallRe
   const retries = options.retries ?? 1;
   const label = options.label ?? "deepseek";
   let sendThinkingParam = true;
+  // DeepSeek'in bilinen hatası: response_format=json_object bazen BOŞ content döndürür (resmi dokümanda yazar).
+  // Boş gelirse aynı istek json modu KAPALI olarak tekrarlanır; JSON zaten prompttan istenir ve gevşek ayrıştırılır.
+  let useJsonMode = true;
+  let maxTokens = options.maxTokens ?? 1200;
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -78,8 +82,8 @@ export async function deepseekJson(options: JsonCallOptions): Promise<JsonCallRe
       const body: Record<string, unknown> = {
         model: options.model ?? (INTEGRATION_OVERRIDES.deepseekModel || env.DEEPSEEK_MODEL),
         messages: options.messages,
-        max_tokens: options.maxTokens ?? 1200,
-        response_format: { type: "json_object" },
+        max_tokens: maxTokens,
+        ...(useJsonMode ? { response_format: { type: "json_object" } } : {}),
         stream: false,
       };
       if (sendThinkingParam) body.thinking = { type: options.thinking ? "enabled" : "disabled" };
@@ -110,11 +114,18 @@ export async function deepseekJson(options: JsonCallOptions): Promise<JsonCallRe
       }
 
       const data = (await response.json()) as {
-        choices?: { message?: { content?: string | null }; finish_reason?: string }[];
+        choices?: { message?: { content?: string | null; reasoning_content?: string | null }; finish_reason?: string }[];
         usage?: JsonCallResult["usage"];
       };
-      const content = data.choices?.[0]?.message?.content?.trim();
-      if (!content) throw new Error(`[${label}] empty content`);
+      const choice = data.choices?.[0];
+      const content = choice?.message?.content?.trim();
+      if (!content) {
+        const reasoned = Boolean(choice?.message?.reasoning_content);
+        console.warn(`[${label}] empty content (finish=${choice?.finish_reason ?? "?"}, reasoning=${reasoned}, json_mode=${useJsonMode}, max_tokens=${maxTokens}) — retrying${useJsonMode ? " without json mode" : ""}`);
+        if (reasoned && choice?.finish_reason === "length") maxTokens = Math.min(16000, maxTokens * 3); // düşünme modu bütçeyi yemiş
+        if (useJsonMode) { useJsonMode = false; attempt--; continue; }
+        throw new Error(`[${label}] empty content (finish=${choice?.finish_reason ?? "?"}, reasoning=${reasoned})`);
+      }
       if (data.choices?.[0]?.finish_reason === "length") console.warn(`[${label}] output truncated at max_tokens=${options.maxTokens ?? 1200}`);
       try {
         return { json: parseLooseJson(content), usage: data.usage ?? null };
